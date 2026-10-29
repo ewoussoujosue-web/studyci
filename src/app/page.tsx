@@ -167,10 +167,9 @@ export default function FeedPage() {
     <div style={{ minHeight: '100vh', background: '#F8FAFC', display: 'flex', justifyContent: 'center' }}>
       <Toast message={toast.msg} type={toast.type} show={toast.show} />
       
-      {/* CONTENEUR PRINCIPAL */}
       <div className="main-content-layout" style={{ display: 'flex', width: '100%', maxWidth: '1300px' }}>
         
-        {/* SIDEBAR GAUCHE (Cachée sur mobile grâce à la classe) */}
+        {/* SIDEBAR GAUCHE (Cachée sur mobile) */}
         <div className="sidebar-desktop" style={{ width: '260px', padding: '20px', borderRight: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', position: 'sticky', top: 0, height: '100vh', background: '#F8FAFC' }}>
           <h1 style={{ fontSize: '28px', fontWeight: 800, color: '#0F172A', marginBottom: '32px', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <div style={{ width: '32px', height: '32px', background: '#F59E0B', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFF', fontSize: '18px' }}>S</div>
@@ -199,7 +198,7 @@ export default function FeedPage() {
           </div>
         </div>
 
-        {/* COLONNE CENTRALE (Prend toute la place sur mobile) */}
+        {/* COLONNE CENTRALE */}
         <div style={{ flex: 1, background: '#FFF', width: '100%' }}>
           
           <div style={{ position: 'sticky', top: 0, zIndex: 50, background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)', borderBottom: '1px solid #E2E8F0', padding: '16px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -219,7 +218,7 @@ export default function FeedPage() {
           </div>
         </div>
 
-        {/* COLONNE DROITE (Cachée sur mobile grâce à la classe) */}
+        {/* COLONNE DROITE (Cachée sur mobile) */}
         <div className="right-column-desktop" style={{ width: '350px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
           <div style={{ position: 'relative' }}>
             <Search size={20} color="#94A3B8" style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)' }} />
@@ -236,19 +235,32 @@ export default function FeedPage() {
         </div>
       </div>
 
-      {/* BARRE DE NAVIGATION MOBILE (Visible uniquement sur mobile) */}
+      {/* BARRE DE NAVIGATION MOBILE FLOTTANTE (6 boutons) */}
       <div className="mobile-nav-bar">
-        <a href="/" style={{ color: '#1E40AF', display: 'flex', flexDirection: 'column', alignItems: 'center', textDecoration: 'none' }}><Home size={22} /><span style={{ fontSize: '10px', fontWeight: 600, marginTop: '2px' }}>Accueil</span></a>
-        <a href="/search" style={{ color: '#64748B', display: 'flex', flexDirection: 'column', alignItems: 'center', textDecoration: 'none' }}><Search size={22} /><span style={{ fontSize: '10px', fontWeight: 600, marginTop: '2px' }}>Annales</span></a>
-        <a href="/reseau" style={{ color: '#64748B', display: 'flex', flexDirection: 'column', alignItems: 'center', textDecoration: 'none' }}><Users size={22} /><span style={{ fontSize: '10px', fontWeight: 600, marginTop: '2px' }}>Réseau</span></a>
-        <a href="/groupes" style={{ color: '#64748B', display: 'flex', flexDirection: 'column', alignItems: 'center', textDecoration: 'none' }}><MessageSquare size={22} /><span style={{ fontSize: '10px', fontWeight: 600, marginTop: '2px' }}>Groupes</span></a>
-        <a href="/profile" style={{ color: '#64748B', display: 'flex', flexDirection: 'column', alignItems: 'center', textDecoration: 'none' }}><User size={22} /><span style={{ fontSize: '10px', fontWeight: 600, marginTop: '2px' }}>Profil</span></a>
+        <a href="/" className="mobile-nav-item active">
+          <Home size={22} />
+        </a>
+        <a href="/search" className="mobile-nav-item">
+          <Search size={22} />
+        </a>
+        <a href="/reseau" className="mobile-nav-item">
+          <Users size={22} />
+        </a>
+        <a href="/messages" className="mobile-nav-item">
+          <MessageSquare size={22} />
+        </a>
+        <a href="/groupes" className="mobile-nav-item">
+          <Users size={22} />
+        </a>
+        <a href="/profile" className="mobile-nav-item">
+          <User size={22} />
+        </a>
       </div>
     </div>
   );
 }
 
-// --- COMPOSANT POSTCARD ---
+// --- COMPOSANT POSTCARD AVEC SUPPRESSION COMMENTAIRES ---
 function PostCard({ post, isLiked, onLike, onDelete, isMine, currentUser, onCommentAdded }: any) {
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState('');
@@ -275,6 +287,12 @@ function PostCard({ post, isLiked, onLike, onDelete, isMine, currentUser, onComm
       onCommentAdded();
     }
     setIsSubmitting(false);
+  };
+
+  const deleteComment = async (commentId: string) => {
+    if (!confirm("Supprimer ce commentaire ?")) return;
+    await supabase.from('post_comments').delete().eq('id', commentId);
+    onCommentAdded();
   };
 
   return (
@@ -321,6 +339,7 @@ function PostCard({ post, isLiked, onLike, onDelete, isMine, currentUser, onComm
             </button>
           </div>
 
+          {/* ZONE COMMENTAIRES */}
           <AnimatePresence>
             {showComments && (
               <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} style={{ overflow: 'hidden', marginTop: '16px' }}>
@@ -328,7 +347,13 @@ function PostCard({ post, isLiked, onLike, onDelete, isMine, currentUser, onComm
                   <div key={comment.id} style={{ display: 'flex', gap: '10px', marginBottom: '12px', paddingLeft: '12px', borderLeft: '2px solid #E2E8F0' }}>
                     {comment.profiles?.avatar_url ? <img src={comment.profiles.avatar_url} style={{ width: '32px', height: '32px', borderRadius: '50%' }} /> : <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#F1F5F9' }}><User size={16} style={{ margin: '8px' }} /></div>}
                     <div style={{ background: '#F8FAFC', padding: '10px 14px', borderRadius: '12px', flex: 1 }}>
-                      <p style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A', marginBottom: '2px' }}>{comment.profiles?.full_name}</p>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <p style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A', marginBottom: '2px' }}>{comment.profiles?.full_name}</p>
+                        {/* BOUTON SUPPRIMER COMMENTAIRE (si c'est le mien) */}
+                        {comment.user_id === currentUser?.id && (
+                          <button onClick={() => deleteComment(comment.id)} style={{ background: 'transparent', color: '#CBD5E1', padding: '2px' }}><Trash2 size={14} /></button>
+                        )}
+                      </div>
                       <p style={{ fontSize: '14px', color: '#334155' }}>{comment.content}</p>
                     </div>
                   </div>

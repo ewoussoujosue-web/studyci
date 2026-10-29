@@ -26,27 +26,12 @@ input, textarea, select { font-family: inherit; outline: none; }
   100% { transform: translateY(0px) translateX(0px) scale(1); }
 }
 
-@keyframes gradientShift {
-  0% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
-}
-
-/* CARTES BLANCHES */
 .glass-card {
   background: #FFFFFF;
   border: 1px solid #E2E8F0;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
 }
 
-.glass-nav {
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border-bottom: 1px solid #E2E8F0;
-}
-
-/* FORMES DE FOND */
 .bg-shape {
   position: fixed;
   border-radius: 50%;
@@ -57,47 +42,57 @@ input, textarea, select { font-family: inherit; outline: none; }
 }
 
 /* ============================================
-   MODE MOBILE (RESPONSIVE)
+   MODE MOBILE (STYLE APPLICATION)
    ============================================ */
 
-/* Par défaut (sur PC), on cache la barre du bas */
 .mobile-nav-bar {
   display: none;
 }
 
 @media (max-width: 768px) {
-  /* 1. Cacher la Sidebar de gauche sur mobile */
-  .sidebar-desktop {
-    display: none !important;
-  }
-  
-  /* 2. Cacher la colonne de droite (Tendances) sur mobile */
-  .right-column-desktop {
-    display: none !important;
-  }
+  .sidebar-desktop { display: none !important; }
+  .right-column-desktop { display: none !important; }
 
-  /* 3. Afficher la barre de navigation en bas */
+  /* BARRE FLOTTANTE */
   .mobile-nav-bar {
     display: flex;
     position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
+    bottom: 15px;
+    left: 15px;
+    right: 15px;
     height: 65px;
     background: #FFFFFF;
-    border-top: 1px solid #E2E8F0;
+    border-radius: 35px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
     justify-content: space-around;
     align-items: center;
     z-index: 9999;
-    box-shadow: 0 -5px 20px rgba(0,0,0,0.05);
+    padding: 0 5px;
+    border: 1px solid #E2E8F0;
   }
 
-  /* 4. Ajouter un espace en bas pour ne pas cacher le contenu par la barre */
+  .mobile-nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: #64748B;
+    text-decoration: none;
+    width: 45px;
+    height: 45px;
+    border-radius: 50%;
+    transition: all 0.2s;
+  }
+
+  .mobile-nav-item.active {
+    background: #EFF6FF;
+    color: #1E40AF;
+  }
+
   body {
-    padding-bottom: 65px;
+    padding-bottom: 90px;
   }
 
-  /* Ajustement des marges sur mobile */
   .main-content-layout {
     flex-direction: column !important;
   }

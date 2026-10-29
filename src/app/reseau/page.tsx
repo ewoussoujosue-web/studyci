@@ -13,6 +13,15 @@ export default function ReseauPage() {
   const [activeFilter, setActiveFilter] = useState('Tous');
   const [myProfile, setMyProfile] = useState<any>(null);
   const [followingIds, setFollowingIds] = useState<string[]>([]);
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Détecter si on est sur mobile
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   useEffect(() => {
     const fetchNetwork = async () => {
@@ -20,18 +29,14 @@ export default function ReseauPage() {
         const { data: { session } } = await supabase.auth.getSession();
         
         if (session?.user) {
-          // 1. Mettre à jour ma dernière connexion
           await supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', session.user.id);
 
-          // 2. Charger mon profil
           const { data: me } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
           setMyProfile(me);
 
-          // 3. Charger les gens que je suis déjà
           const { data: followsData } = await supabase.from('follows').select('following_id').eq('follower_id', session.user.id);
           if (followsData) setFollowingIds(followsData.map(f => f.following_id));
 
-          // 4. Charger les autres étudiants avec leurs stats
           const { data: all } = await supabase
             .from('profiles')
             .select('*')
@@ -59,16 +64,11 @@ export default function ReseauPage() {
 
   const toggleFollow = async (studentId: string) => {
     if (!myProfile) return;
-    
-    const isFollowing = followingIds.includes(studentId);
-
-    if (isFollowing) {
-      // Se désabonner
+    if (followingIds.includes(studentId)) {
       setFollowingIds(followingIds.filter(id => id !== studentId));
       setStudents(students.map(s => s.id === studentId ? { ...s, followersCount: Math.max(0, s.followersCount - 1) } : s));
       await supabase.from('follows').delete().eq('follower_id', myProfile.id).eq('following_id', studentId);
     } else {
-      // S'abonner
       setFollowingIds([...followingIds, studentId]);
       setStudents(students.map(s => s.id === studentId ? { ...s, followersCount: s.followersCount + 1 } : s));
       await supabase.from('follows').insert({ follower_id: myProfile.id, following_id: studentId });
@@ -82,7 +82,6 @@ export default function ReseauPage() {
 
   if (loading) return <Loader text="Chargement du réseau..." />;
 
-  // Filtres dynamiques
   const filters = ['Tous', 'Mon École', 'Droit', 'Compta', 'Médecine', 'L1', 'L2', 'L3'];
 
   const filteredStudents = students.filter(s => {
@@ -96,20 +95,19 @@ export default function ReseauPage() {
     return matchesSearch && matchesFilter;
   });
 
-  // Fonction pour vérifier si l'utilisateur est en ligne (5 dernières minutes)
   const isUserOnline = (lastSeen: string) => {
     if (!lastSeen) return false;
     const diff = new Date().getTime() - new Date(lastSeen).getTime();
-    return diff < 5 * 60 * 1000; // 5 minutes en millisecondes
+    return diff < 5 * 60 * 1000;
   };
 
   return (
     <div style={{ minHeight: '100vh', background: '#F8FAFC', display: 'flex', justifyContent: 'center' }}>
       
-      <div style={{ display: 'flex', width: '100%', maxWidth: '1300px' }}>
+      <div className="main-content-layout" style={{ display: 'flex', width: '100%', maxWidth: '1300px' }}>
         
-        {/* SIDEBAR GAUCHE */}
-        <div style={{ width: '260px', padding: '20px', borderRight: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', position: 'sticky', top: 0, height: '100vh', background: '#F8FAFC' }}>
+        {/* SIDEBAR GAUCHE (Cachée sur mobile) */}
+        <div className="sidebar-desktop" style={{ width: '260px', padding: '20px', borderRight: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', position: 'sticky', top: 0, height: '100vh', background: '#F8FAFC' }}>
           <h1 style={{ fontSize: '28px', fontWeight: 800, color: '#0F172A', marginBottom: '32px', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <div style={{ width: '32px', height: '32px', background: '#F59E0B', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFF', fontSize: '18px' }}>S</div>
             StudyCI
@@ -139,118 +137,121 @@ export default function ReseauPage() {
         </div>
 
         {/* CONTENU CENTRAL */}
-        <div style={{ flex: 1, minWidth: '400px', background: '#FFF' }}>
+        <div style={{ flex: 1, minWidth: '0', background: '#FFF', width: '100%' }}>
           
-          {/* Header Fixe */}
-          <div style={{ position: 'sticky', top: 0, zIndex: 50, background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)', borderBottom: '1px solid #E2E8F0', padding: '20px 32px' }}>
+          <div style={{ position: 'sticky', top: 0, zIndex: 50, background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)', borderBottom: '1px solid #E2E8F0', padding: isMobile ? '16px' : '20px' }}>
             <h2 style={{ fontSize: '24px', fontWeight: 800, color: '#0F172A', marginBottom: '16px' }}>Le Réseau</h2>
             
             <div style={{ position: 'relative', width: '100%' }}>
               <Search size={20} color="#94A3B8" style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)' }} />
               <input 
                 type="text" 
-                placeholder="Rechercher par nom, école ou niveau..." 
+                placeholder="Rechercher..." 
                 value={searchQuery} 
                 onChange={(e) => setSearchQuery(e.target.value)} 
-                style={{ width: '100%', padding: '14px 20px 14px 48px', borderRadius: '50px', border: '1px solid #E2E8F0', background: '#F8FAFC', fontSize: '15px', outline: 'none', transition: 'all 0.2s' }} 
-                onFocus={(e) => { e.target.style.background = '#FFF'; e.target.style.borderColor = '#F59E0B'; }}
-                onBlur={(e) => { e.target.style.background = '#F8FAFC'; e.target.style.borderColor = '#E2E8F0'; }}
+                style={{ width: '100%', padding: '14px 20px 14px 48px', borderRadius: '50px', border: '1px solid #E2E8F0', background: '#F8FAFC', fontSize: '15px', outline: 'none' }} 
               />
             </div>
 
-            {/* Filtres */}
             <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingTop: '16px', scrollbarWidth: 'none' }}>
               {filters.map(f => (
                 <button 
                   key={f} 
                   onClick={() => setActiveFilter(f)}
-                  style={{ padding: '8px 16px', borderRadius: '50px', fontSize: '13px', fontWeight: 700, whiteSpace: 'nowrap', background: activeFilter === f ? '#0F172A' : '#F1F5F9', color: activeFilter === f ? '#FFF' : '#64748B', border: 'none', transition: 'all 0.2s', cursor: 'pointer' }}>
+                  style={{ padding: '8px 16px', borderRadius: '50px', fontSize: '13px', fontWeight: 700, whiteSpace: 'nowrap', background: activeFilter === f ? '#0F172A' : '#F1F5F9', color: activeFilter === f ? '#FFF' : '#64748B', border: 'none' }}>
                   {f}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Grille d'étudiants */}
-          <div style={{ padding: '24px 32px' }}>
+          <div style={{ padding: isMobile ? '16px' : '20px' }}>
             {filteredStudents.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '60px 20px', background: '#FFF', borderRadius: '24px', border: '1px solid #E2E8F0' }}>
                 <Users size={64} color="#CBD5E1" style={{ margin: '0 auto 16px' }} />
                 <h3 style={{ fontSize: '20px', fontWeight: 800, color: '#0F172A' }}>Aucun étudiant trouvé</h3>
               </div>
             ) : (
-              <motion.div layout style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '16px' }}>
+              /* LA GRILLE PASSE À 2 COLONNES SUR MOBILE */
+              <motion.div layout style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(auto-fill, minmax(240px, 1fr))', gap: isMobile ? '12px' : '16px' }}>
                 {filteredStudents.map((s) => (
                   <motion.div 
-                    key={s.id} layout initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} whileHover={{ y: -4, boxShadow: '0 15px 30px rgba(0,0,0,0.06)' }}
-                    style={{ background: '#FFF', borderRadius: '20px', padding: '24px', display: 'flex', flexDirection: 'column', alignItems: 'center', border: '1px solid #E2E8F0' }}>
+                    key={s.id} layout initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
+                    style={{ background: '#FFF', borderRadius: '20px', padding: isMobile ? '16px' : '24px', display: 'flex', flexDirection: 'column', alignItems: 'center', border: '1px solid #E2E8F0' }}>
                     
                     <div style={{ position: 'relative', marginBottom: '12px' }}>
-                      {s.avatar_url ? <img src={s.avatar_url} style={{ width: '80px', height: '80px', borderRadius: '50%', objectFit: 'cover', border: '3px solid #F59E0B' }} /> : <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: '#F8FAFC', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '3px solid #F59E0B' }}><User size={36} color="#F59E0B" /></div>}
+                      {s.avatar_url ? <img src={s.avatar_url} style={{ width: isMobile ? '60px' : '80px', height: isMobile ? '60px' : '80px', borderRadius: '50%', objectFit: 'cover', border: '3px solid #F59E0B' }} /> : <div style={{ width: isMobile ? '60px' : '80px', height: isMobile ? '60px' : '80px', borderRadius: '50%', background: '#F8FAFC', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '3px solid #F59E0B' }}><User size={isMobile ? 28 : 36} color="#F59E0B" /></div>}
                       
-                      {/* POINT VERT DYNAMIQUE */}
                       {isUserOnline(s.last_seen) && (
-                        <div style={{ position: 'absolute', bottom: '2px', right: '2px', width: '16px', height: '16px', background: '#10B981', borderRadius: '50%', border: '2px solid #FFF' }} />
+                        <div style={{ position: 'absolute', bottom: '2px', right: '2px', width: '14px', height: '14px', background: '#10B981', borderRadius: '50%', border: '2px solid #FFF' }} />
                       )}
                     </div>
 
-                    {/* BADGES DYNAMIQUES */}
                     <div style={{ display: 'flex', gap: '4px', marginBottom: '8px' }}>
-                      {s.followersCount >= 3 && <span title="Populaire" style={{ background: '#FEF2F2', color: '#EF4444', padding: '4px', borderRadius: '50%' }}><Flame size={14} /></span>}
-                      {s.docsCount >= 5 && <span title="Top Contributeur" style={{ background: '#EFF6FF', color: '#3B82F6', padding: '4px', borderRadius: '50%' }}><Award size={14} /></span>}
+                      {s.followersCount >= 3 && <span title="Populaire" style={{ background: '#FEF2F2', color: '#EF4444', padding: '3px', borderRadius: '50%' }}><Flame size={12} /></span>}
+                      {s.docsCount >= 5 && <span title="Top Contributeur" style={{ background: '#EFF6FF', color: '#3B82F6', padding: '3px', borderRadius: '50%' }}><Award size={12} /></span>}
                     </div>
 
-                    <h3 style={{ fontSize: '17px', fontWeight: 800, color: '#0F172A', textAlign: 'center' }}>{s.full_name || 'Étudiant'}</h3>
+                    <h3 style={{ fontSize: isMobile ? '14px' : '17px', fontWeight: 800, color: '#0F172A', textAlign: 'center', width: '100%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.full_name || 'Étudiant'}</h3>
                     
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', marginTop: '6px', marginBottom: '20px' }}>
-                      <span style={{ fontSize: '12px', padding: '4px 12px', background: 'rgba(245,158,11,0.15)', color: '#B45309', borderRadius: '20px', fontWeight: 700 }}>
-                        {s.level || 'Niveau inconnu'}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', marginTop: '6px', marginBottom: '12px', width: '100%' }}>
+                      <span style={{ fontSize: '10px', padding: '2px 8px', background: 'rgba(245,158,11,0.15)', color: '#B45309', borderRadius: '20px', fontWeight: 700 }}>
+                        {s.level || 'Niveau'}
                       </span>
                       {s.school && (
-                        <span style={{ fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', color: '#64748B', fontWeight: 600 }}>
-                          <GraduationCap size={12} /> {s.school}
+                        <span style={{ fontSize: '10px', display: 'flex', alignItems: 'center', gap: '2px', color: '#64748B', fontWeight: 600 }}>
+                          <GraduationCap size={10} /> {s.school}
                         </span>
                       )}
                       
-                      {/* NOMBRE D'ABONNÉS */}
-                      <motion.span key={s.followersCount} initial={{ scale: 1.2 }} animate={{ scale: 1 }} style={{ fontSize: '12px', color: '#94A3B8', fontWeight: 600, marginTop: '4px' }}>
+                      <span style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 600 }}>
                         {s.followersCount} abonné(s)
-                      </motion.span>
+                      </span>
                     </div>
 
-                    <div style={{ display: 'flex', gap: '8px', width: '100%', marginTop: 'auto' }}>
-                      <a href={`/profile/${s.id}`} style={{ flex: 1, padding: '10px', background: '#F8FAFC', color: '#0F172A', border: '1px solid #E2E8F0', borderRadius: '10px', fontWeight: 700, fontSize: '13px', textAlign: 'center', textDecoration: 'none' }}>
-                        Profil
-                      </a>
+                    {/* BOUTONS COMPACTS POUR MOBILE */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', width: '100%', marginTop: 'auto' }}>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <a href={`/profile/${s.id}`} style={{ flex: 1, padding: '8px', background: '#F8FAFC', color: '#0F172A', border: '1px solid #E2E8F0', borderRadius: '8px', fontWeight: 700, fontSize: '12px', textAlign: 'center', textDecoration: 'none' }}>
+                          Profil
+                        </a>
+                        <button onClick={() => toggleFollow(s.id)} style={{ flex: 1, padding: '8px', background: followingIds.includes(s.id) ? '#ECFDF5' : '#FFF', color: followingIds.includes(s.id) ? '#059669' : '#1E40AF', border: `1px solid ${followingIds.includes(s.id) ? '#A7F3D0' : '#BFDBFE'}`, borderRadius: '8px', fontWeight: 700, fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '2px', cursor: 'pointer' }}>
+                          {followingIds.includes(s.id) ? <UserCheck size={14} /> : <UserPlus size={14} />}
+                        </button>
+                      </div>
                       
-                      {/* BOUTON SUIVRE / ABONNÉ */}
-                      <button onClick={() => toggleFollow(s.id)} style={{ flex: 1, padding: '10px', background: followingIds.includes(s.id) ? '#ECFDF5' : '#FFF', color: followingIds.includes(s.id) ? '#059669' : '#1E40AF', border: `1px solid ${followingIds.includes(s.id) ? '#A7F3D0' : '#BFDBFE'}`, borderRadius: '10px', fontWeight: 700, fontSize: '13px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', cursor: 'pointer', transition: 'all 0.2s' }}>
-                        {followingIds.includes(s.id) ? <><UserCheck size={16} /> Abonné</> : <><UserPlus size={16} /> Suivre</>}
-                      </button>
+                      <a href={`/chat/${s.id}`} style={{ width: '100%', padding: '8px', background: '#1E40AF', color: '#FFF', borderRadius: '8px', fontWeight: 700, fontSize: '12px', textAlign: 'center', textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                        <MessageCircle size={14} /> Message
+                      </a>
                     </div>
-
-                    {/* BOUTON MESSAGE EN DESSOUS */}
-                    <a href={`/chat/${s.id}`} style={{ width: '100%', marginTop: '8px', padding: '10px', background: '#1E40AF', color: '#FFF', borderRadius: '10px', fontWeight: 700, fontSize: '13px', textAlign: 'center', textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-                      <MessageCircle size={14} /> Message
-                    </a>
-
                   </motion.div>
                 ))}
               </motion.div>
             )}
           </div>
         </div>
+      </div>
 
-        {/* COLONNE DROITE */}
-        <div style={{ width: '300px', padding: '20px', display: 'block', borderLeft: '1px solid #E2E8F0' }}>
-            <div style={{ background: '#FFF', padding: '20px', borderRadius: '16px', border: '1px solid #E2E8F0' }}>
-              <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A', marginBottom: '12px' }}>Conseil du jour</h3>
-              <p style={{ fontSize: '14px', color: '#64748B', lineHeight: 1.5 }}>
-                N'hésite pas à envoyer un message aux étudiants de ta filière pour organiser des sessions de révision ou échanger des documents.
-              </p>
-            </div>
-        </div>
-
+      {/* BARRE DE NAVIGATION MOBILE */}
+      <div className="mobile-nav-bar">
+        <a href="/" className="mobile-nav-item">
+          <Home size={22} />
+        </a>
+        <a href="/search" className="mobile-nav-item">
+          <Search size={22} />
+        </a>
+        <a href="/reseau" className="mobile-nav-item active">
+          <Users size={22} />
+        </a>
+        <a href="/messages" className="mobile-nav-item">
+          <MessageSquare size={22} />
+        </a>
+        <a href="/groupes" className="mobile-nav-item">
+          <MessageSquare size={22} />
+        </a>
+        <a href="/profile" className="mobile-nav-item">
+          <User size={22} />
+        </a>
       </div>
     </div>
   );

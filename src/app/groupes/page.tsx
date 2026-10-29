@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
-import { Users, Search, Plus, Lock, Unlock, MessageSquare, ArrowRight, X, Check, Camera, Image as ImageIcon } from 'lucide-react';
+import { Users, Search, Plus, Lock, Unlock, MessageSquare, ArrowRight, X, Check, Camera, Home, User } from 'lucide-react';
 import Loader from '@/components/Loader';
 import Toast from '@/components/Toast';
 
@@ -13,6 +13,7 @@ export default function GroupesPage() {
   const [groups, setGroups] = useState<any[]>([]);
   const [myGroups, setMyGroups] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isMobile, setIsMobile] = useState(false);
   
   const [showCreate, setShowCreate] = useState(false);
   const [joinModal, setJoinModal] = useState<any>(null);
@@ -26,6 +27,13 @@ export default function GroupesPage() {
   const [creating, setCreating] = useState(false);
 
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error'; show: boolean }>({ msg: '', type: 'success', show: false });
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   const showToast = (msg: string, type: 'success' | 'error') => {
     setToast({ msg, type, show: true });
@@ -42,7 +50,6 @@ export default function GroupesPage() {
       if (memberships) setMyGroups(memberships.map(m => m.group_id));
     }
 
-    // On récupère aussi le profil du créateur pour l'afficher
     const { data } = await supabase.from('groups').select('*, profiles!groups_creator_id_fkey(full_name, avatar_url)').order('created_at', { ascending: false });
     setGroups(data || []);
     setLoading(false);
@@ -60,7 +67,6 @@ export default function GroupesPage() {
     try {
       let avatar_url = null;
 
-      // Si on a choisi une photo de profil pour le groupe
       if (groupAvatar) {
         const ext = groupAvatar.name.split('.').pop();
         const path = `groups/${Date.now()}.${ext}`;
@@ -142,7 +148,6 @@ export default function GroupesPage() {
     }
   };
 
-  // Filtre de recherche
   const filteredGroups = groups.filter(g => g.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
   if (loading) return <Loader text="Chargement des groupes..." />;
@@ -151,17 +156,17 @@ export default function GroupesPage() {
     <div style={{ minHeight: '100vh', background: '#F8FAFC', display: 'flex', justifyContent: 'center' }}>
       <Toast message={toast.msg} type={toast.type} show={toast.show} />
 
-      <div style={{ display: 'flex', width: '100%', maxWidth: '1300px' }}>
+      <div className="main-content-layout" style={{ display: 'flex', width: '100%', maxWidth: '1300px' }}>
         
-        {/* SIDEBAR GAUCHE */}
-        <div style={{ width: '260px', padding: '20px', borderRight: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', position: 'sticky', top: 0, height: '100vh', background: '#F8FAFC' }}>
+        {/* SIDEBAR GAUCHE (Cachée sur mobile) */}
+        <div className="sidebar-desktop" style={{ width: '260px', padding: '20px', borderRight: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', position: 'sticky', top: 0, height: '100vh', background: '#F8FAFC' }}>
           <h1 style={{ fontSize: '28px', fontWeight: 800, color: '#0F172A', marginBottom: '32px', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <div style={{ width: '32px', height: '32px', background: '#F59E0B', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFF', fontSize: '18px' }}>S</div>
             StudyCI
           </h1>
 
           <nav style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
-            <a href="/" style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '12px 16px', borderRadius: '12px', color: '#334155', fontWeight: 600, textDecoration: 'none', fontSize: '16px' }}><Users size={24} /> Accueil</a>
+            <a href="/" style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '12px 16px', borderRadius: '12px', color: '#334155', fontWeight: 600, textDecoration: 'none', fontSize: '16px' }}><Home size={24} /> Accueil</a>
             <a href="/search" style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '12px 16px', borderRadius: '12px', color: '#334155', fontWeight: 600, textDecoration: 'none', fontSize: '16px' }}><Search size={24} /> Annales</a>
             <a href="/reseau" style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '12px 16px', borderRadius: '12px', color: '#334155', fontWeight: 600, textDecoration: 'none', fontSize: '16px' }}><Users size={24} /> Réseau</a>
             <a href="/groupes" style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '12px 16px', borderRadius: '12px', background: '#EFF6FF', color: '#1E40AF', fontWeight: 700, textDecoration: 'none', fontSize: '16px' }}><MessageSquare size={24} /> Groupes</a>
@@ -169,29 +174,31 @@ export default function GroupesPage() {
         </div>
 
         {/* CONTENU CENTRAL */}
-        <div style={{ flex: 1, background: '#FFF' }}>
+        <div style={{ flex: 1, background: '#FFF', width: '100%' }}>
           
-          <div style={{ position: 'sticky', top: 0, zIndex: 50, background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)', borderBottom: '1px solid #E2E8F0', padding: '20px 32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
+          <div style={{ position: 'sticky', top: 0, zIndex: 50, background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)', borderBottom: '1px solid #E2E8F0', padding: isMobile ? '16px' : '20px 32px', display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'center', gap: '16px' }}>
+            <div style={{ width: '100%' }}>
               <h2 style={{ fontSize: '24px', fontWeight: 800, color: '#0F172A' }}>Les Groupes</h2>
-              <div style={{ position: 'relative', marginTop: '16px', width: '300px' }}>
+              
+              <div style={{ position: 'relative', marginTop: '16px', width: '100%' }}>
                 <Search size={18} color="#94A3B8" style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)' }} />
                 <input 
                   type="text" 
                   placeholder="Rechercher un groupe..." 
                   value={searchQuery} 
                   onChange={(e) => setSearchQuery(e.target.value)} 
-                  style={{ width: '100%', padding: '10px 10px 10px 40px', borderRadius: '50px', border: '1px solid #E2E8F0', background: '#F8FAFC', fontSize: '14px', outline: 'none' }} 
+                  style={{ width: '100%', padding: '12px 12px 12px 40px', borderRadius: '50px', border: '1px solid #E2E8F0', background: '#F8FAFC', fontSize: '14px', outline: 'none' }} 
                 />
               </div>
             </div>
+            
             <motion.button whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} onClick={() => setShowCreate(true)}
-              style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '12px 20px', background: '#F59E0B', color: '#FFF', borderRadius: '12px', fontWeight: 700, fontSize: '15px', boxShadow: '0 4px 15px rgba(245,158,11,0.3)' }}>
+              style={{ width: isMobile ? '100%' : 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '12px 20px', background: '#F59E0B', color: '#FFF', borderRadius: '12px', fontWeight: 700, fontSize: '15px', boxShadow: '0 4px 15px rgba(245,158,11,0.3)' }}>
               <Plus size={20} /> Créer un groupe
             </motion.button>
           </div>
 
-          <div style={{ padding: '32px' }}>
+          <div style={{ padding: isMobile ? '16px' : '32px' }}>
             {filteredGroups.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '60px 20px', background: '#F8FAFC', borderRadius: '24px', border: '1px solid #E2E8F0' }}>
                 <Users size={64} color="#CBD5E1" style={{ margin: '0 auto 16px' }} />
@@ -199,19 +206,19 @@ export default function GroupesPage() {
                 <p style={{ color: '#64748B' }}>Essaie un autre mot-clé ou crée ton propre groupe.</p>
               </div>
             ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(300px, 1fr))', gap: isMobile ? '12px' : '20px' }}>
                 {filteredGroups.map((g) => {
                   const isJoined = myGroups.includes(g.id);
                   return (
                     <motion.div key={g.id} whileHover={{ y: -4, boxShadow: '0 10px 25px rgba(0,0,0,0.05)' }} 
-                      style={{ background: '#FFF', padding: '24px', borderRadius: '20px', border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column' }}>
+                      style={{ background: '#FFF', padding: '20px', borderRadius: '20px', border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column' }}>
                       
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
                         {g.avatar_url ? (
-                          <img src={g.avatar_url} alt={g.name} style={{ width: '50px', height: '50px', borderRadius: '16px', objectFit: 'cover' }} />
+                          <img src={g.avatar_url} alt={g.name} style={{ width: '60px', height: '60px', borderRadius: '16px', objectFit: 'cover' }} />
                         ) : (
-                          <div style={{ width: '50px', height: '50px', background: 'rgba(245,158,11,0.1)', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <Users size={24} color="#F59E0B" />
+                          <div style={{ width: '60px', height: '60px', background: 'rgba(245,158,11,0.1)', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Users size={28} color="#F59E0B" />
                           </div>
                         )}
                         {g.is_private ? <span style={{ background: '#FEF2F2', color: '#EF4444', padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}><Lock size={12} /> Privé</span> 
@@ -219,7 +226,7 @@ export default function GroupesPage() {
                       </div>
 
                       <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', marginBottom: '4px' }}>{g.name}</h3>
-                      <p style={{ fontSize: '12px', color: '#64748B', marginBottom: '20px' }}>Créé par {g.profiles?.full_name || 'un étudiant'}</p>
+                      <p style={{ fontSize: '13px', color: '#64748B', marginBottom: '20px' }}>Créé par {g.profiles?.full_name || 'un étudiant'}</p>
                       
                       <button onClick={() => handleJoinClick(g)} style={{ marginTop: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '12px', background: isJoined ? '#ECFDF5' : '#1E40AF', color: isJoined ? '#059669' : '#FFF', borderRadius: '12px', fontWeight: 700, width: '100%', border: isJoined ? '1px solid #A7F3D0' : 'none', cursor: 'pointer' }}>
                         {isJoined ? <><Check size={16} /> Ouvrir le chat</> : <>Rejoindre <ArrowRight size={16} /></>}
@@ -237,7 +244,7 @@ export default function GroupesPage() {
       <AnimatePresence>
         {showCreate && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(4px)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} style={{ background: '#FFF', padding: '32px', borderRadius: '24px', maxWidth: '400px', width: '100%', boxShadow: '0 20px 50px rgba(0,0,0,0.2)' }}>
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} style={{ background: '#FFF', padding: '24px', borderRadius: '24px', maxWidth: '400px', width: '100%', boxShadow: '0 20px 50px rgba(0,0,0,0.2)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
                 <h3 style={{ fontSize: '20px', fontWeight: 800, color: '#0F172A' }}>Créer un groupe</h3>
                 <button onClick={() => setShowCreate(false)} style={{ background: 'transparent', color: '#64748B' }}><X size={24} /></button>
@@ -245,7 +252,6 @@ export default function GroupesPage() {
 
               <form onSubmit={createGroup} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 
-                {/* UPLOAD PHOTO DU GROUPE */}
                 <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '8px' }}>
                   <label style={{ cursor: 'pointer', position: 'relative' }}>
                     <div style={{ width: '80px', height: '80px', borderRadius: '50%', background: '#F8FAFC', border: '2px dashed #CBD5E1', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
@@ -280,18 +286,18 @@ export default function GroupesPage() {
         )}
       </AnimatePresence>
 
-      {/* MODAL REJOINDRE (CODE D'INVITATION) */}
+      {/* MODAL REJOINDRE */}
       <AnimatePresence>
         {joinModal && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(4px)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} style={{ background: '#FFF', padding: '32px', borderRadius: '24px', maxWidth: '400px', width: '100%', boxShadow: '0 20px 50px rgba(0,0,0,0.2)', textAlign: 'center' }}>
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} style={{ background: '#FFF', padding: '24px', borderRadius: '24px', maxWidth: '400px', width: '100%', boxShadow: '0 20px 50px rgba(0,0,0,0.2)', textAlign: 'center' }}>
               <div style={{ width: '64px', height: '64px', background: '#FEF2F2', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
                 <Lock size={32} color="#EF4444" />
               </div>
               <h3 style={{ fontSize: '20px', fontWeight: 800, color: '#0F172A', marginBottom: '8px' }}>Groupe Privé</h3>
-              <p style={{ fontSize: '14px', color: '#64748B', marginBottom: '24px' }}>Entre le code d'invitation pour rejoindre <strong>{joinModal.name}</strong>.</p>
+              <p style={{ fontSize: '14px', color: '#64748B', marginBottom: '24px' }}>Entre le code pour rejoindre <strong>{joinModal.name}</strong>.</p>
 
-              <input type="text" value={inviteCodeInput} onChange={(e) => setInviteCodeInput(e.target.value.toUpperCase())} placeholder="CODE D'INVITATION" style={{ width: '100%', padding: '16px', borderRadius: '12px', border: '1px solid #E2E8F0', background: '#F8FAFC', textAlign: 'center', fontWeight: 800, fontSize: '18px', letterSpacing: '2px', marginBottom: '16px', outline: 'none' }} />
+              <input type="text" value={inviteCodeInput} onChange={(e) => setInviteCodeInput(e.target.value.toUpperCase())} placeholder="CODE" style={{ width: '100%', padding: '16px', borderRadius: '12px', border: '1px solid #E2E8F0', background: '#F8FAFC', textAlign: 'center', fontWeight: 800, fontSize: '18px', letterSpacing: '2px', marginBottom: '16px', outline: 'none' }} />
 
               <div style={{ display: 'flex', gap: '12px' }}>
                 <button onClick={() => { setJoinModal(null); setInviteCodeInput(''); }} style={{ flex: 1, padding: '14px', background: '#F1F5F9', color: '#0F172A', borderRadius: '12px', fontWeight: 600 }}>Annuler</button>
@@ -301,6 +307,28 @@ export default function GroupesPage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* BARRE DE NAVIGATION MOBILE */}
+      <div className="mobile-nav-bar">
+        <a href="/" className="mobile-nav-item">
+          <Home size={22} />
+        </a>
+        <a href="/search" className="mobile-nav-item">
+          <Search size={22} />
+        </a>
+        <a href="/reseau" className="mobile-nav-item">
+          <Users size={22} />
+        </a>
+        <a href="/messages" className="mobile-nav-item">
+          <MessageSquare size={22} />
+        </a>
+        <a href="/groupes" className="mobile-nav-item active">
+          <MessageSquare size={22} />
+        </a>
+        <a href="/profile" className="mobile-nav-item">
+          <User size={22} />
+        </a>
+      </div>
     </div>
   );
 }
