@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
-import { MessageSquare, Heart, User, Sparkles, Users, Search, Calendar, FileText, TrendingUp, Home, LogOut, Image as ImageIcon, Trash2, Send } from 'lucide-react';
+import { MessageSquare, Heart, User, Sparkles, Users, Search, Calendar, FileText, Home, LogOut, Trash2, Send, Plus, Compass } from 'lucide-react';
 import Loader from '@/components/Loader';
 import NotificationBell from '@/components/NotificationBell';
 import Toast from '@/components/Toast';
@@ -17,7 +17,17 @@ export default function FeedPage() {
   const [posts, setPosts] = useState<any[]>([]);
   const [likes, setLikes] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+  
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error'; show: boolean }>({ msg: '', type: 'success', show: false });
+
+  // Détecter si on est sur mobile
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   const showToast = (msg: string, type: 'success' | 'error') => {
     setToast({ msg, type, show: true });
@@ -126,203 +136,143 @@ export default function FeedPage() {
 
   if (loading) return <Loader text="Chargement de StudyCI..." />;
 
+  // --- VUE NON CONNECTÉ (Landing Page) ---
   if (!user) {
     return (
       <div style={{ 
-        minHeight: '100vh', 
-        position: 'relative', 
-        display: 'flex', 
-        alignItems: 'center', 
-        justifyContent: 'flex-start',
-        padding: '0 8%',
-        overflow: 'hidden' 
+        minHeight: '100vh', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'flex-start', padding: isMobile ? '24px' : '0 8%', overflow: 'hidden' 
       }}>
+        <motion.div initial={{ scale: 1.05 }} animate={{ scale: 1 }} transition={{ duration: 15, ease: "easeOut" }}
+          style={{ position: 'absolute', inset: 0, backgroundImage: 'url(/background.jpg)', backgroundSize: 'cover', backgroundPosition: isMobile ? 'center' : 'center right', zIndex: 0 }} />
+        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to right, rgba(15,23,42,0.9) 0%, rgba(15,23,42,0.6) 45%, rgba(15,23,42,0) 100%)', zIndex: 1 }} />
         
-        {/* 1. FOND ANIMÉ (Zoom lent) */}
-        <motion.div 
-          initial={{ scale: 1.05 }}
-          animate={{ scale: 1 }}
-          transition={{ duration: 15, ease: "easeOut" }}
-          style={{ 
-            position: 'absolute', 
-            inset: 0, 
-            backgroundImage: 'url(/background.jpg)', 
-            backgroundSize: 'cover', 
-            backgroundPosition: 'center right', // On garde la fille à droite
-            zIndex: 0
-          }} 
-        />
-        
-        {/* 2. OVERLAY (Dégradé de gauche à droite) */}
-        <div style={{ 
-          position: 'absolute', inset: 0, 
-          background: 'linear-gradient(to right, rgba(15,23,42,0.9) 0%, rgba(15,23,42,0.6) 45%, rgba(15,23,42,0) 100%)', 
-          zIndex: 1 
-        }} />
-        
-        {/* 3. CONTENU (Aligné à gauche) */}
-        <div style={{ 
-          position: 'relative', 
-          zIndex: 3, 
-          maxWidth: '650px', 
-          textAlign: 'left'
-        }}>
-          
-          <motion.h1 
-            initial={{ opacity: 0, x: -30 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.8, delay: 0.2, ease: "easeOut" }}
-            style={{ fontSize: '90px', fontWeight: 900, color: '#FFFFFF', marginBottom: '16px', letterSpacing: '-3px', textShadow: '0 10px 30px rgba(0,0,0,0.5)' }}
-          >
+        <div style={{ position: 'relative', zIndex: 3, maxWidth: '650px', textAlign: 'left' }}>
+          <motion.h1 initial={{ opacity: 0, x: -30 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.8, delay: 0.2, ease: "easeOut" }}
+            style={{ fontSize: isMobile ? '60px' : '90px', fontWeight: 900, color: '#FFFFFF', marginBottom: '16px', letterSpacing: '-3px', textShadow: '0 10px 30px rgba(0,0,0,0.5)' }}>
             Study<span style={{ color: '#FBBF24' }}>CI</span>
           </motion.h1>
 
-          <motion.div
-            initial="hidden"
-            animate="visible"
-            variants={{
-              hidden: { opacity: 0 },
-              visible: {
-                opacity: 1,
-                transition: { staggerChildren: 0.1, delayChildren: 0.6 }
-              }
-            }}
-            style={{ marginBottom: '48px', display: 'flex', flexWrap: 'wrap', gap: '12px' }}
-          >
+          <motion.div initial="hidden" animate="visible" variants={{ hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.1, delayChildren: 0.6 } } }}
+            style={{ marginBottom: '48px', display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
             {["Ouvre,", "révise", "et", "réussis", "avec", "la", "communauté."].map((word, index) => (
-              <motion.span
-                key={index}
-                variants={{
-                  hidden: { opacity: 0, y: 20 },
-                  visible: { opacity: 1, y: 0 }
-                }}
-                style={{ fontSize: '32px', color: '#F8FAFC', fontWeight: 500, textShadow: '0 2px 10px rgba(0,0,0,0.8)' }}
-              >
+              <motion.span key={index} variants={{ hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0 } }}
+                style={{ fontSize: isMobile ? '24px' : '32px', color: '#F8FAFC', fontWeight: 500, textShadow: '0 2px 10px rgba(0,0,0,0.8)' }}>
                 {word}
               </motion.span>
             ))}
           </motion.div>
 
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 1.2, type: "spring", stiffness: 200 }}
-          >
-            <motion.a 
-              href="/inscription" 
-              animate={{ 
-                boxShadow: ["0 0 0 0 rgba(245, 158, 11, 0.7)", "0 0 0 20px rgba(245, 158, 11, 0)"],
-              }}
-              transition={{ duration: 2, repeat: Infinity, ease: "easeOut" }}
-              whileHover={{ scale: 1.05, boxShadow: '0 20px 40px rgba(245, 158, 11, 0.4)' }}
-              whileTap={{ scale: 0.95 }}
-              style={{ 
-                display: 'inline-block', 
-                padding: '20px 60px', 
-                background: 'linear-gradient(135deg, #F77F00, #FBBF24)', 
-                color: '#FFFFFF', 
-                fontSize: '22px', 
-                fontWeight: 800, 
-                borderRadius: '50px', 
-                textDecoration: 'none'
-              }}
-            >
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 1.2, type: "spring", stiffness: 200 }}>
+            <motion.a href="/inscription" animate={{ boxShadow: ["0 0 0 0 rgba(245, 158, 11, 0.7)", "0 0 0 20px rgba(245, 158, 11, 0)"] }} transition={{ duration: 2, repeat: Infinity, ease: "easeOut" }} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
+              style={{ display: 'inline-block', padding: '20px 60px', background: 'linear-gradient(135deg, #F77F00, #FBBF24)', color: '#FFFFFF', fontSize: '22px', fontWeight: 800, borderRadius: '50px', textDecoration: 'none' }}>
               Commencer l'aventure
             </motion.a>
           </motion.div>
-          
         </div>
       </div>
     );
   }
 
+  // --- VUE CONNECTÉE (Desktop / Mobile) ---
   return (
-    <div style={{ minHeight: '100vh', background: '#F8FAFC', display: 'flex', justifyContent: 'center' }}>
+    <div style={{ minHeight: '100vh', background: '#F8FAFC', display: 'flex', justifyContent: 'center', paddingBottom: isMobile ? '70px' : '0' }}>
       <Toast message={toast.msg} type={toast.type} show={toast.show} />
       
       <div style={{ display: 'flex', width: '100%', maxWidth: '1300px' }}>
         
-        {/* COLONNE GAUCHE */}
-        <div style={{ width: '260px', padding: '20px', borderRight: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', position: 'sticky', top: 0, height: '100vh', background: '#F8FAFC' }}>
-          <h1 style={{ fontSize: '28px', fontWeight: 800, color: '#0F172A', marginBottom: '32px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div style={{ width: '32px', height: '32px', background: '#F59E0B', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFF', fontSize: '18px' }}>S</div>
-            StudyCI
-          </h1>
+        {/* SIDEBAR GAUCHE (Cachée sur mobile) */}
+        {!isMobile && (
+          <div style={{ width: '260px', padding: '20px', borderRight: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', position: 'sticky', top: 0, height: '100vh', background: '#F8FAFC' }}>
+            <h1 style={{ fontSize: '28px', fontWeight: 800, color: '#0F172A', marginBottom: '32px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <div style={{ width: '32px', height: '32px', background: '#F59E0B', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFF', fontSize: '18px' }}>S</div>
+              StudyCI
+            </h1>
 
-          <nav style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
-            <a href="/" style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '12px 16px', borderRadius: '12px', background: '#EFF6FF', color: '#1E40AF', fontWeight: 700, textDecoration: 'none', fontSize: '16px' }}><Home size={24} /> Accueil</a>
-            <a href="/search" style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '12px 16px', borderRadius: '12px', color: '#334155', fontWeight: 600, textDecoration: 'none', fontSize: '16px' }}><Search size={24} /> Annales</a>
-            <a href="/reseau" style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '12px 16px', borderRadius: '12px', color: '#334155', fontWeight: 600, textDecoration: 'none', fontSize: '16px' }}><Users size={24} /> Réseau</a>
-            <a href="/messages" style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '12px 16px', borderRadius: '12px', color: '#334155', fontWeight: 600, textDecoration: 'none', fontSize: '16px' }}><MessageSquare size={24} /> Messages</a>
-            <a href="/groupes" style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '12px 16px', borderRadius: '12px', color: '#334155', fontWeight: 600, textDecoration: 'none', fontSize: '16px' }}><Users size={24} /> Groupes</a>
-            <a href="/planning" style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '12px 16px', borderRadius: '12px', color: '#334155', fontWeight: 600, textDecoration: 'none', fontSize: '16px' }}><Calendar size={24} /> Planning</a>
-            <a href="/mon-ia" style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '12px 16px', borderRadius: '12px', color: '#334155', fontWeight: 600, textDecoration: 'none', fontSize: '16px' }}><Sparkles size={24} color="#8B5CF6" /> Mon IA</a>
-          </nav>
+            <nav style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
+              <a href="/" style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '12px 16px', borderRadius: '12px', background: '#EFF6FF', color: '#1E40AF', fontWeight: 700, textDecoration: 'none', fontSize: '16px' }}><Home size={24} /> Accueil</a>
+              <a href="/search" style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '12px 16px', borderRadius: '12px', color: '#334155', fontWeight: 600, textDecoration: 'none', fontSize: '16px' }}><Search size={24} /> Annales</a>
+              <a href="/reseau" style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '12px 16px', borderRadius: '12px', color: '#334155', fontWeight: 600, textDecoration: 'none', fontSize: '16px' }}><Users size={24} /> Réseau</a>
+              <a href="/messages" style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '12px 16px', borderRadius: '12px', color: '#334155', fontWeight: 600, textDecoration: 'none', fontSize: '16px' }}><MessageSquare size={24} /> Messages</a>
+              <a href="/groupes" style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '12px 16px', borderRadius: '12px', color: '#334155', fontWeight: 600, textDecoration: 'none', fontSize: '16px' }}><Users size={24} /> Groupes</a>
+              <a href="/planning" style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '12px 16px', borderRadius: '12px', color: '#334155', fontWeight: 600, textDecoration: 'none', fontSize: '16px' }}><Calendar size={24} /> Planning</a>
+              <a href="/mon-ia" style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '12px 16px', borderRadius: '12px', color: '#334155', fontWeight: 600, textDecoration: 'none', fontSize: '16px' }}><Sparkles size={24} color="#8B5CF6" /> Mon IA</a>
+            </nav>
 
-          <div style={{ borderTop: '1px solid #E2E8F0', paddingTop: '16px', marginTop: 'auto' }}>
-            <a href="/profile" style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', borderRadius: '12px', background: '#FFF', border: '1px solid #E2E8F0', textDecoration: 'none', marginBottom: '12px' }}>
-              {profile?.avatar_url ? <img src={profile.avatar_url} style={{ width: '40px', height: '40px', borderRadius: '50%' }} /> : <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#F1F5F9' }}><User size={20} color="#94A3B8" /></div>}
-              <div style={{ flex: 1, overflow: 'hidden' }}>
-                <p style={{ fontSize: '14px', fontWeight: 700, color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{profile?.full_name || 'Mon Profil'}</p>
-                <p style={{ fontSize: '12px', color: '#64748B' }}>{profile?.level || 'Étudiant'}</p>
-              </div>
-            </a>
-            <button onClick={logout} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px', borderRadius: '12px', background: 'transparent', color: '#EF4444', fontWeight: 600, fontSize: '16px' }}><LogOut size={24} /> Déconnexion</button>
+            <div style={{ borderTop: '1px solid #E2E8F0', paddingTop: '16px', marginTop: 'auto' }}>
+              <a href="/profile" style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', borderRadius: '12px', background: '#FFF', border: '1px solid #E2E8F0', textDecoration: 'none', marginBottom: '12px' }}>
+                {profile?.avatar_url ? <img src={profile.avatar_url} style={{ width: '40px', height: '40px', borderRadius: '50%' }} /> : <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#F1F5F9' }}><User size={20} color="#94A3B8" /></div>}
+                <div style={{ flex: 1, overflow: 'hidden' }}>
+                  <p style={{ fontSize: '14px', fontWeight: 700, color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{profile?.full_name || 'Mon Profil'}</p>
+                  <p style={{ fontSize: '12px', color: '#64748B' }}>{profile?.level || 'Étudiant'}</p>
+                </div>
+              </a>
+              <button onClick={logout} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px', borderRadius: '12px', background: 'transparent', color: '#EF4444', fontWeight: 600, fontSize: '16px' }}><LogOut size={24} /> Déconnexion</button>
+            </div>
           </div>
-        </div>
+        )}
 
-        {/* COLONNE CENTRALE */}
-        <div style={{ flex: 1, borderRight: '1px solid #E2E8F0', minWidth: '400px', background: '#FFF' }}>
+        {/* COLONNE CENTRALE (Prend toute la place sur mobile) */}
+        <div style={{ flex: 1, borderRight: isMobile ? 'none' : '1px solid #E2E8F0', background: '#FFF', width: '100%' }}>
           
           <div style={{ position: 'sticky', top: 0, zIndex: 50, background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)', borderBottom: '1px solid #E2E8F0', padding: '16px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h2 style={{ fontSize: '20px', fontWeight: 800, color: '#0F172A' }}>Accueil</h2>
+            {isMobile ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                 <div style={{ width: '32px', height: '32px', background: '#F59E0B', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFF', fontSize: '18px' }}>S</div>
+                 <span style={{ fontSize: '20px', fontWeight: 800, color: '#0F172A' }}>StudyCI</span>
+              </div>
+            ) : (
+              <h2 style={{ fontSize: '20px', fontWeight: 800, color: '#0F172A' }}>Accueil</h2>
+            )}
             <NotificationBell />
           </div>
 
           <StoriesBar profile={profile} />
-
           <TextEditor profile={profile} onSubmit={createPost} uploading={uploading} />
 
           <div style={{ background: '#F8FAFC', padding: '16px 0' }}>
             <AnimatePresence>
               {posts.map((p) => (
-                <PostCard key={p.id} post={p} isLiked={likes.includes(p.id)} onLike={() => toggleLike(p.id)} onDelete={() => deletePost(p.id)} isMine={p.user_id === user.id} currentUser={profile} onCommentAdded={loadFeed} />
+                <PostCard key={p.id} post={p} isLiked={likes.includes(p.id)} onLike={() => toggleLike(p.id)} onDelete={() => deletePost(p.id)} isMine={p.user_id === user.id} currentUser={profile} onCommentAdded={loadFeed} isMobile={isMobile} />
               ))}
             </AnimatePresence>
           </div>
         </div>
 
-        {/* COLONNE DROITE */}
-        <div style={{ width: '350px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          <div style={{ position: 'relative' }}>
-            <Search size={20} color="#94A3B8" style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)' }} />
-            <input type="text" placeholder="Rechercher sur StudyCI" style={{ width: '100%', padding: '14px 14px 14px 48px', background: '#F1F5F9', border: 'none', borderRadius: '30px', fontSize: '15px', outline: 'none' }} />
-          </div>
-
-          <div style={{ background: '#F8FAFC', borderRadius: '16px', padding: '20px', border: '1px solid #E2E8F0' }}>
-            <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', marginBottom: '16px' }}>Tendances</h3>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div>
-                <p style={{ fontSize: '12px', color: '#64748B' }}>Annales · Tendance</p>
-                <p style={{ fontSize: '15px', fontWeight: 700, color: '#0F172A' }}>#DroitCivil2024</p>
-                <p style={{ fontSize: '12px', color: '#64748B' }}>1 245 téléchargements</p>
-              </div>
-              <div>
-                <p style={{ fontSize: '12px', color: '#64748B' }}>Examens · Tendance</p>
-                <p style={{ fontSize: '15px', fontWeight: 700, color: '#0F172A' }}>#PartielsL2</p>
-                <p style={{ fontSize: '12px', color: '#64748B' }}>850 étudiants en parlent</p>
+        {/* COLONNE DROITE (Cachée sur mobile) */}
+        {!isMobile && (
+          <div style={{ width: '350px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <div style={{ position: 'relative' }}>
+              <Search size={20} color="#94A3B8" style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)' }} />
+              <input type="text" placeholder="Rechercher sur StudyCI" style={{ width: '100%', padding: '14px 14px 14px 48px', background: '#F1F5F9', border: 'none', borderRadius: '30px', fontSize: '15px', outline: 'none' }} />
+            </div>
+            <div style={{ background: '#F8FAFC', borderRadius: '16px', padding: '20px', border: '1px solid #E2E8F0' }}>
+              <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', marginBottom: '16px' }}>Tendances</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div><p style={{ fontSize: '12px', color: '#64748B' }}>Annales · Tendance</p><p style={{ fontSize: '15px', fontWeight: 700, color: '#0F172A' }}>#DroitCivil2024</p><p style={{ fontSize: '12px', color: '#64748B' }}>1 245 téléchargements</p></div>
+                <div><p style={{ fontSize: '12px', color: '#64748B' }}>Examens · Tendance</p><p style={{ fontSize: '15px', fontWeight: 700, color: '#0F172A' }}>#PartielsL2</p><p style={{ fontSize: '12px', color: '#64748B' }}>850 étudiants en parlent</p></div>
               </div>
             </div>
           </div>
-        </div>
+        )}
 
       </div>
+
+      {/* BARRE DE NAVIGATION EN BAS (Uniquement sur mobile) */}
+      {isMobile && (
+        <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: '#FFF', borderTop: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-around', padding: '12px 0', zIndex: 100 }}>
+          <a href="/" style={{ color: '#1E40AF', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', textDecoration: 'none' }}><Home size={24} /><span style={{ fontSize: '10px', fontWeight: 600 }}>Accueil</span></a>
+          <a href="/search" style={{ color: '#64748B', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', textDecoration: 'none' }}><Search size={24} /><span style={{ fontSize: '10px', fontWeight: 600 }}>Annales</span></a>
+          <a href="/reseau" style={{ color: '#64748B', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', textDecoration: 'none' }}><Users size={24} /><span style={{ fontSize: '10px', fontWeight: 600 }}>Réseau</span></a>
+          <a href="/groupes" style={{ color: '#64748B', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', textDecoration: 'none' }}><MessageSquare size={24} /><span style={{ fontSize: '10px', fontWeight: 600 }}>Groupes</span></a>
+          <a href="/profile" style={{ color: '#64748B', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', textDecoration: 'none' }}><User size={24} /><span style={{ fontSize: '10px', fontWeight: 600 }}>Profil</span></a>
+        </div>
+      )}
     </div>
   );
 }
 
 // --- COMPOSANT POUR LE POST ET SES COMMENTAIRES ---
-function PostCard({ post, isLiked, onLike, onDelete, isMine, currentUser, onCommentAdded }: any) {
+function PostCard({ post, isLiked, onLike, onDelete, isMine, currentUser, onCommentAdded, isMobile }: any) {
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -353,9 +303,9 @@ function PostCard({ post, isLiked, onLike, onDelete, isMine, currentUser, onComm
   };
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, height: 0 }} style={{ padding: '20px 24px', borderBottom: '1px solid #E2E8F0', background: '#FFF', marginBottom: '8px' }}>
-      <div style={{ display: 'flex', gap: '16px' }}>
-        {post.profiles?.avatar_url ? <img src={post.profiles.avatar_url} style={{ width: '48px', height: '48px', borderRadius: '50%' }} /> : <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#F1F5F9' }}><User size={24} style={{ margin: '12px' }} /></div>}
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, height: 0 }} style={{ padding: isMobile ? '16px' : '20px 24px', borderBottom: '1px solid #E2E8F0', background: '#FFF', marginBottom: '8px' }}>
+      <div style={{ display: 'flex', gap: isMobile ? '12px' : '16px' }}>
+        {post.profiles?.avatar_url ? <img src={post.profiles.avatar_url} style={{ width: '40px', height: '40px', borderRadius: '50%' }} /> : <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#F1F5F9' }}><User size={20} style={{ margin: '10px' }} /></div>}
         <div style={{ flex: 1 }}>
           
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -369,7 +319,7 @@ function PostCard({ post, isLiked, onLike, onDelete, isMine, currentUser, onComm
           </div>
           
           {post.content && post.content.trim() !== '' && (
-            <div style={{ background: post.theme !== 'default' ? themeData.bg : 'transparent', color: themeData.color, padding: post.theme !== 'default' ? '32px' : '0', borderRadius: post.theme !== 'default' ? '16px' : '0', fontSize: post.theme !== 'default' ? '24px' : '15px', fontWeight: post.theme !== 'default' ? 700 : 400, textAlign: post.theme !== 'default' ? 'center' : 'left', marginBottom: '16px', whiteSpace: 'pre-wrap', boxShadow: post.theme !== 'default' ? '0 10px 25px rgba(0,0,0,0.1)' : 'none' }}>
+            <div style={{ background: post.theme !== 'default' ? themeData.bg : 'transparent', color: themeData.color, padding: post.theme !== 'default' ? '24px' : '0', borderRadius: post.theme !== 'default' ? '16px' : '0', fontSize: post.theme !== 'default' ? '20px' : '15px', fontWeight: post.theme !== 'default' ? 700 : 400, textAlign: post.theme !== 'default' ? 'center' : 'left', marginBottom: '16px', whiteSpace: 'pre-wrap', boxShadow: post.theme !== 'default' ? '0 10px 25px rgba(0,0,0,0.1)' : 'none' }}>
               {post.content}
             </div>
           )}
@@ -387,7 +337,7 @@ function PostCard({ post, isLiked, onLike, onDelete, isMine, currentUser, onComm
             </div>
           )}
 
-          <div style={{ display: 'flex', gap: '40px', marginTop: '12px' }}>
+          <div style={{ display: 'flex', gap: isMobile ? '24px' : '40px', marginTop: '12px' }}>
             <button onClick={onLike} style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'transparent', color: isLiked ? '#EF4444' : '#64748B', fontWeight: 600, fontSize: '14px' }}>
               <Heart size={20} fill={isLiked ? '#EF4444' : 'none'} /> {post.post_likes?.length || 0}
             </button>
@@ -396,7 +346,6 @@ function PostCard({ post, isLiked, onLike, onDelete, isMine, currentUser, onComm
             </button>
           </div>
 
-          {/* ZONE DES COMMENTAIRES */}
           <AnimatePresence>
             {showComments && (
               <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} style={{ overflow: 'hidden', marginTop: '16px' }}>
