@@ -158,7 +158,7 @@ export default function GroupesPage() {
 
       <div className="main-content-layout" style={{ display: 'flex', width: '100%', maxWidth: '1300px' }}>
         
-        {/* SIDEBAR GAUCHE (Cachée sur mobile) */}
+        {/* SIDEBAR GAUCHE (Cachée sur mobile grâce à la classe) */}
         <div className="sidebar-desktop" style={{ width: '260px', padding: '20px', borderRight: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', position: 'sticky', top: 0, height: '100vh', background: '#F8FAFC' }}>
           <h1 style={{ fontSize: '28px', fontWeight: 800, color: '#0F172A', marginBottom: '32px', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <div style={{ width: '32px', height: '32px', background: '#F59E0B', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFF', fontSize: '18px' }}>S</div>
