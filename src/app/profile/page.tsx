@@ -96,7 +96,13 @@ export default function MyProfilePage() {
   };
 
   if (loading) return <Loader text="Chargement du profil..." />;
-  if (!profile) return <div style={{ padding: '50px', textAlign: 'center' }}>Erreur de chargement.</div>;
+  
+  if (!profile) {
+    supabase.auth.signOut().then(() => {
+      window.location.href = '/inscription';
+    });
+    return <Loader text="Session expirée, redirection..." />;
+  }
 
   const imageUrl = profile.avatar_url && profile.avatar_url.startsWith('http') ? `${profile.avatar_url}?t=${Date.now()}` : null;
   const skillList = profile.skills ? profile.skills.split(',').map((s: string) => s.trim()).filter((s: string) => s !== '') : [];
@@ -170,7 +176,6 @@ export default function MyProfilePage() {
                 {docCount >= 5 && <span style={{ background: '#EFF6FF', color: '#3B82F6', padding: '6px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}><Award size={14} /> Top Contributeur</span>}
               </div>
 
-              {/* BOUTON MODIFIER */}
               <button onClick={() => setEditing(!editing)} style={{ width: isMobile ? '100%' : 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '12px 20px', background: editing ? '#FEF2F2' : '#F8FAFC', color: editing ? '#EF4444' : '#1E40AF', border: `1px solid ${editing ? '#FECACA' : '#E2E8F0'}`, borderRadius: '12px', fontWeight: 700, cursor: 'pointer', marginBottom: '24px' }}>
                 {editing ? <><X size={18}/> Annuler</> : <><Edit2 size={18}/> Modifier mon profil</>}
               </button>
