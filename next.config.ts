@@ -1,6 +1,14 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // 1. Autoriser les images venant de Supabase
+  // 1. Ignorer les erreurs TypeScript et ESLint pendant le build (pour ne pas bloquer)
+  typescript: {
+    ignoreBuildErrors: true,
+  },
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+
+  // 2. Autoriser les images venant de Supabase
   images: {
     remotePatterns: [
       {
@@ -10,22 +18,15 @@ const nextConfig = {
     ],
   },
 
-  // 2. Ignorer les erreurs TypeScript et ESLint pendant le build
-  // (Ça évite que Vercel bloque pour des détails de typage)
-  typescript: {
-    ignoreBuildErrors: true,
-  },
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
-
-  // 3. RÉSOUDRE L'ERREUR DE BUILD VERCEL (BUILD_UTILS_SPAWN_1)
-  // Cette option empêche Next.js de planter lors de la génération statique
+  // 3. L'option pour éviter le crash "BUILD_UTILS_SPAWN_1" sur Vercel
   experimental: {
     missingSuspenseWithCSRBailout: false,
   },
 
-  // 4. Désactiver la télémétrie (optionnel, pour aller plus vite)
+  // 4. Optimiser le build pour Vercel (allège la mémoire utilisée)
+  output: 'standalone',
+
+  // 5. Désactiver la télémétrie pour aller plus vite
   swcMinify: true,
 };
 
