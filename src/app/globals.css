@@ -26,14 +26,12 @@ input, textarea, select { font-family: inherit; outline: none; }
   100% { transform: translateY(0px) translateX(0px) scale(1); }
 }
 
-/* CARTES BLANCHES */
 .glass-card {
   background: #FFFFFF;
   border: 1px solid #E2E8F0;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
 }
 
-/* FORMES DE FOND */
 .bg-shape {
   position: fixed;
   border-radius: 50%;
@@ -48,7 +46,7 @@ input, textarea, select { font-family: inherit; outline: none; }
    ============================================ */
 
 .mobile-nav-bar {
-  display: none; /* Caché sur PC */
+  display: none;
 }
 
 @media (max-width: 768px) {
@@ -76,7 +74,6 @@ input, textarea, select { font-family: inherit; outline: none; }
     border: 1px solid #E2E8F0;
   }
 
-  /* Style des icônes de la barre */
   .mobile-nav-item {
     display: flex;
     flex-direction: column;
@@ -90,19 +87,21 @@ input, textarea, select { font-family: inherit; outline: none; }
     transition: all 0.2s;
   }
 
-  /* L'onglet actif a un fond bleu clair */
   .mobile-nav-item.active {
     background: #EFF6FF;
     color: #1E40AF;
   }
 
-  /* On ajoute de l'espace en bas pour que la barre ne cache pas le contenu */
   body {
     padding-bottom: 100px;
   }
 
-  /* Layout en colonne */
   .main-content-layout {
     flex-direction: column !important;
+  }
+
+  /* 4. Empêcher le zoom automatique sur les champs de texte */
+  input, textarea, select {
+    font-size: 16px !important;
   }
 }

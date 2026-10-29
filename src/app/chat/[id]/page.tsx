@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Send, ArrowLeft, Image as ImageIcon, Paperclip, Trash2, X, FileText } from 'lucide-react';
+import { Send, ArrowLeft, Image as ImageIcon, Paperclip, Trash2, X, FileText, Mic, Square, Download } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useParams } from 'next/navigation';
 import Loader from '@/components/Loader';
@@ -19,6 +19,12 @@ export default function ChatPage() {
   const [uploading, setUploading] = useState(false);
   const [fileToUpload, setFileToUpload] = useState<File | null>(null);
   
+  // États pour les vocaux
+  const [isRecording, setIsRecording] = useState(false);
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -27,11 +33,9 @@ export default function ChatPage() {
       if (!session) { window.location.href = '/inscription'; return; }
       setMe(session.user);
 
-      // Récupérer le profil de l'autre personne
       const { data: otherProf } = await supabase.from('profiles').select('*').eq('id', receiverId).single();
       setOtherUser(otherProf);
 
-      // Récupérer les messages
       const { data: msgs } = await supabase
         .from('messages')
         .select('*')
@@ -45,10 +49,8 @@ export default function ChatPage() {
 
     fetchData();
 
-    // Écouter en temps réel (Supabase Realtime)
     const channel = supabase.channel('chat_room')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, (payload) => {
-        // On recharge les messages si un nouveau arrive ou si on supprime
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, () => {
         fetchData();
       })
       .subscribe();
@@ -60,52 +62,120 @@ export default function ChatPage() {
     setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
   };
 
+  // --- GESTION DES VOCAUX ---
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) audioChunksRef.current.push(event.data);
+      };
+
+      mediaRecorder.onstop = () => {
+        // On récupère le type exact (souvent audio/webm ou audio/mp4 sur Safari)
+        const mimeType = mediaRecorder.mimeType || 'audio/webm';
+        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+        setAudioBlob(audioBlob);
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+    } catch (err) {
+      alert("Impossible d'accéder au microphone.");
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+      mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+    }
+  };
+
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if ((!newMessage.trim() && !fileToUpload) || !me) return;
+    if ((!newMessage.trim() && !fileToUpload && !audioBlob) || !me) return;
 
     setUploading(true);
     let file_url = null;
     let file_type = null;
 
-    // Upload du fichier si présent
-    if (fileToUpload) {
-      file_type = fileToUpload.type;
-      const ext = fileToUpload.name.split('.').pop();
-      // On met dans le bucket 'avatars' qui est public
-      const path = `chat/${me.id}-${Date.now()}.${ext}`;
-      
-      const { error: uploadError } = await supabase.storage.from('avatars').upload(path, fileToUpload);
-      if (!uploadError) {
-        const { data } = supabase.storage.from('avatars').getPublicUrl(path);
-        file_url = data.publicUrl;
-      } else {
-        alert("Erreur d'upload du fichier");
-        setUploading(false);
-        return;
+    try {
+      // 1. Upload du fichier (image/vidéo/pdf)
+      if (fileToUpload) {
+        file_type = fileToUpload.type;
+        const ext = fileToUpload.name.split('.').pop();
+        const path = `chat/${me.id}-${Date.now()}.${ext}`;
+        
+        const { error: uploadError } = await supabase.storage.from('avatars').upload(path, fileToUpload);
+        if (!uploadError) {
+          const { data } = supabase.storage.from('avatars').getPublicUrl(path);
+          file_url = data.publicUrl;
+        }
       }
-    }
 
-    // Envoi du message
-    const { error } = await supabase.from('messages').insert({
-      sender_id: me.id,
-      receiver_id: receiverId,
-      content: newMessage.trim() || (file_type?.startsWith('image') ? 'Image' : 'Fichier'),
-      file_url,
-      file_type
-    });
+      // 2. Upload du vocal
+      if (audioBlob) {
+        file_type = audioBlob.type;
+        const ext = file_type.includes('mp4') ? 'mp4' : 'webm';
+        const path = `chat/${me.id}-${Date.now()}.${ext}`;
+        
+        const { error: uploadError } = await supabase.storage.from('avatars').upload(path, audioBlob);
+        if (!uploadError) {
+          const { data } = supabase.storage.from('avatars').getPublicUrl(path);
+          file_url = data.publicUrl;
+        }
+      }
 
-    if (!error) {
-      setNewMessage('');
-      setFileToUpload(null);
-      scrollToBottom();
+      // 3. Envoi du message
+      const { error } = await supabase.from('messages').insert({
+        sender_id: me.id,
+        receiver_id: receiverId,
+        content: newMessage.trim() || (audioBlob ? 'Message vocal' : 'Fichier'),
+        file_url,
+        file_type
+      });
+
+      if (!error) {
+        setNewMessage('');
+        setFileToUpload(null);
+        setAudioBlob(null);
+        scrollToBottom();
+      }
+    } catch (err: any) {
+      alert("Erreur d'envoi : " + err.message);
+    } finally {
+      setUploading(false);
     }
-    setUploading(false);
   };
 
   const deleteMessage = async (msgId: string) => {
     if (!confirm("Supprimer ce message ?")) return;
     await supabase.from('messages').delete().eq('id', msgId);
+  };
+
+  // --- FONCTION POUR TÉLÉCHARGER LES FICHIERS ---
+  const downloadFile = async (url: string, filename: string) => {
+    try {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      // Fallback si le fetch est bloqué (CORS) : on ouvre l'image dans un nouvel onglet
+      window.open(url, '_blank');
+    }
   };
 
   if (loading) return <Loader text="Ouverture de la discussion..." />;
@@ -136,7 +206,6 @@ export default function ChatPage() {
           return (
             <div key={msg.id} style={{ display: 'flex', justifyContent: isMine ? 'flex-end' : 'flex-start', alignItems: 'center', gap: '10px' }}>
               
-              {/* Bouton supprimer (seulement si c'est mon message) */}
               {isMine && (
                 <button onClick={() => deleteMessage(msg.id)} style={{ background: 'transparent', color: '#CBD5E1', cursor: 'pointer' }} title="Supprimer">
                   <Trash2 size={16} />
@@ -145,7 +214,7 @@ export default function ChatPage() {
 
               <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
                 style={{ 
-                  maxWidth: '70%', padding: '12px 16px', borderRadius: '16px', 
+                  maxWidth: '75%', padding: '12px 16px', borderRadius: '16px', 
                   borderBottomRightRadius: isMine ? '4px' : '16px',
                   borderBottomLeftRadius: isMine ? '16px' : '4px',
                   background: isMine ? '#1E40AF' : '#FFF', 
@@ -154,16 +223,41 @@ export default function ChatPage() {
                   boxShadow: '0 2px 10px rgba(0,0,0,0.05)'
                 }}>
                 
-                {/* Affichage du fichier joint */}
+                {/* Affichage du média */}
                 {msg.file_url && (
-                  <div style={{ marginBottom: msg.content ? '8px' : '0' }}>
-                    {msg.file_type?.startsWith('image/') ? (
+                  <div style={{ marginBottom: msg.content ? '8px' : '0', position: 'relative' }}>
+                    
+                    {/* BOUTON TÉLÉCHARGER */}
+                    <button 
+                      onClick={() => downloadFile(msg.file_url, `fichier-${msg.id}`)}
+                      style={{ position: 'absolute', top: '8px', right: '8px', background: 'rgba(0,0,0,0.5)', color: '#FFF', padding: '6px', borderRadius: '50%', zIndex: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      title="Télécharger"
+                    >
+                      <Download size={16} />
+                    </button>
+
+                    {/* IMAGE */}
+                    {msg.file_type?.startsWith('image/') && (
                       <img src={msg.file_url} style={{ maxWidth: '100%', borderRadius: '8px' }} />
-                    ) : msg.file_type?.startsWith('video/') ? (
+                    )}
+                    
+                    {/* VIDÉO */}
+                    {msg.file_type?.startsWith('video/') && (
                       <video src={msg.file_url} controls style={{ maxWidth: '100%', borderRadius: '8px' }} />
-                    ) : (
+                    )}
+
+                    {/* AUDIO / VOCAL */}
+                    {msg.file_type?.startsWith('audio/') && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(0,0,0,0.1)', padding: '8px', borderRadius: '8px' }}>
+                        <Mic size={20} color={isMine ? '#FFF' : '#1E40AF'} />
+                        <audio src={msg.file_url} controls style={{ height: '30px', flex: 1 }} />
+                      </div>
+                    )}
+
+                    {/* AUTRE DOCUMENT (PDF) */}
+                    {!msg.file_type?.startsWith('image') && !msg.file_type?.startsWith('video') && !msg.file_type?.startsWith('audio') && (
                       <a href={msg.file_url} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '8px', textDecoration: 'underline', color: isMine ? '#FFF' : '#1E40AF' }}>
-                        <FileText size={20} /> Télécharger le fichier
+                        <FileText size={20} /> Ouvrir le document
                       </a>
                     )}
                   </div>
@@ -183,7 +277,6 @@ export default function ChatPage() {
       {/* ZONE DE SAISIE */}
       <div style={{ background: '#FFF', padding: '16px 24px', borderTop: '1px solid #E2E8F0' }}>
         
-        {/* Aperçu du fichier avant envoi */}
         {fileToUpload && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#F1F5F9', padding: '8px 12px', borderRadius: '8px', marginBottom: '12px', width: 'fit-content' }}>
             <Paperclip size={16} color="#64748B" />
@@ -192,21 +285,36 @@ export default function ChatPage() {
           </div>
         )}
 
+        {audioBlob && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#F1F5F9', padding: '8px 12px', borderRadius: '8px', marginBottom: '12px', width: 'fit-content' }}>
+            <Mic size={16} color="#64748B" />
+            <span style={{ fontSize: '13px', color: '#334155', fontWeight: 600 }}>Vocal prêt</span>
+            <button onClick={() => setAudioBlob(null)} style={{ background: 'transparent', color: '#EF4444' }}><X size={16} /></button>
+          </div>
+        )}
+
         <form onSubmit={handleSend} style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-          {/* Bouton pour uploader (image, vidéo, pdf) */}
-          <label style={{ cursor: 'pointer', color: '#F59E0B', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', background: '#FEF3C7', borderRadius: '50%' }}>
+          <label style={{ cursor: 'pointer', color: '#F59E0B', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', background: '#FEF3C7', borderRadius: '50%', flexShrink: 0 }}>
             <ImageIcon size={20} />
             <input type="file" accept="image/*,video/*,application/pdf" style={{ display: 'none' }} onChange={(e) => setFileToUpload(e.target.files?.[0] || null)} />
           </label>
+
+          <button 
+            type="button" 
+            onClick={isRecording ? stopRecording : startRecording} 
+            style={{ color: isRecording ? '#EF4444' : '#64748B', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', background: isRecording ? '#FEF2F2' : '#F1F5F9', borderRadius: '50%', border: 'none', flexShrink: 0 }}
+          >
+            {isRecording ? <Square size={20} /> : <Mic size={20} />}
+          </button>
 
           <input 
             value={newMessage} 
             onChange={(e) => setNewMessage(e.target.value)} 
             placeholder="Écris un message..." 
-            style={{ flex: 1, padding: '14px 20px', borderRadius: '30px', border: '1px solid #E2E8F0', background: '#F8FAFC', outline: 'none', fontSize: '15px' }} 
+            style={{ flex: 1, padding: '14px 20px', borderRadius: '30px', border: '1px solid #E2E8F0', background: '#F8FAFC', outline: 'none', fontSize: '16px', minWidth: 0 }} 
           />
 
-          <button type="submit" disabled={uploading || (!newMessage.trim() && !fileToUpload)} style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#F59E0B', color: '#FFF', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: (uploading || (!newMessage.trim() && !fileToUpload)) ? 0.5 : 1 }}>
+          <button type="submit" disabled={uploading || (!newMessage.trim() && !fileToUpload && !audioBlob)} style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#F59E0B', color: '#FFF', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: (uploading || (!newMessage.trim() && !fileToUpload && !audioBlob)) ? 0.5 : 1, flexShrink: 0 }}>
             {uploading ? <div style={{ width: '20px', height: '20px', border: '2px solid #FFF', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} /> : <Send size={20} />}
           </button>
         </form>
