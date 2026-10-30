@@ -139,10 +139,10 @@ function SearchContent() {
     setTimeout(() => setToast(t => ({ ...t, show: false })), 2000);
   };
 
-  // --- FONCTION DE TÉLÉCHARGEMENT ---
+  // --- FONCTION DE TÉLÉCHARGEMENT (DÉBLOCAGE À 1 DOCUMENT) ---
   const download = async (doc: any) => {
-    if (!isAdmin && uploadCount < 5) {
-      setToast({ msg: "Tu dois uploader 5 documents pour débloquer les téléchargements !", type: 'error', show: true });
+    if (!isAdmin && uploadCount < 1) {
+      setToast({ msg: "Tu dois uploader 1 document pour débloquer les téléchargements !", type: 'error', show: true });
       setTimeout(() => setToast(t => ({ ...t, show: false })), 4000);
       return;
     }
@@ -186,8 +186,9 @@ function SearchContent() {
     return matchesQuery && matchesLevel && matchesYear && matchesType;
   });
 
-  const progressPercent = Math.min((uploadCount / 5) * 100, 100);
-  const isLocked = !isAdmin && uploadCount < 5;
+  // Calcul de la progression (sur 1 document)
+  const progressPercent = Math.min((uploadCount / 1) * 100, 100);
+  const isLocked = !isAdmin && uploadCount < 1;
 
   if (loading) return <Loader text="Chargement de la bibliothèque..." />;
 
@@ -211,10 +212,10 @@ function SearchContent() {
               <Lock size={24} color="#EF4444" />
               <div>
                 <h3 style={{ color: '#991B1B', fontWeight: 700, fontSize: '14px' }}>Téléchargements bloqués</h3>
-                <p style={{ color: '#B91C1C', fontSize: '13px' }}>Partage 5 documents pour débloquer.</p>
+                <p style={{ color: '#B91C1C', fontSize: '13px' }}>Partage 1 document pour débloquer.</p>
               </div>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#B91C1C', marginBottom: '6px', fontWeight: 600 }}><span>Progression</span><span>{uploadCount} / 5</span></div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#B91C1C', marginBottom: '6px', fontWeight: 600 }}><span>Progression</span><span>{uploadCount} / 1</span></div>
             <div style={{ height: '6px', background: '#FECACA', borderRadius: '4px', overflow: 'hidden' }}><motion.div initial={{ width: 0 }} animate={{ width: `${progressPercent}%` }} style={{ height: '100%', background: '#EF4444' }} /></div>
           </motion.div>
         )}

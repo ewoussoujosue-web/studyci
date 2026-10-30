@@ -46,8 +46,16 @@ export default function UploadPage() {
     const { error: upErr } = await supabase.storage.from('documents').upload(path, file);
     if (upErr) { showToast('Erreur upload : ' + upErr.message, 'error'); setUploading(false); return; }
 
+    // On met le type en minuscule pour correspondre à la contrainte de la base si besoin
+    const safeType = type.toLowerCase();
+
     const { error: dbErr } = await supabase.from('documents').insert({
-      uploader_id: me.id, title, type, academic_year: year, file_path: path, status: 'pending',
+      uploader_id: me.id, 
+      title, 
+      type: safeType, 
+      academic_year: year, 
+      file_path: path, 
+      status: 'pending',
     });
     if (dbErr) { showToast('Erreur : ' + dbErr.message, 'error'); setUploading(false); return; }
 
@@ -89,7 +97,7 @@ export default function UploadPage() {
                 style={{ width: '100%', padding: '16px', background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', color: '#F1F5F9', fontSize: '15px' }}>
                 <option value="annale">Annale</option>
                 <option value="cours">Cours</option>
-                <option value="td">TD</option>
+                <option value="exercice">Exercice</option> {/* Remplacement de TD par Exercice */}
               </select>
             </div>
             <div style={{ flex: 1, minWidth: '200px' }}>
@@ -119,7 +127,6 @@ export default function UploadPage() {
                   <span style={{ color: '#64748B', fontSize: '13px' }}>Formats acceptés : .pdf, .jpg, .jpeg, .png</span>
                 </>
               )}
-              {/* L'attribut accept accepte maintenant les images ET les pdf */}
               <input type="file" accept=".pdf, image/*" onChange={(e) => setFile(e.target.files?.[0] || null)} style={{ display: 'none' }} />
             </motion.label>
           </div>
