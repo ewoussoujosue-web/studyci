@@ -9,7 +9,7 @@ import Loader from '@/components/Loader';
 
 export default function ChatPage() {
   const params = useParams();
-  const receiverId = params.id as string;
+  const receiverId = Array.isArray(params.id) ? params.id[0] : params.id;
 
   const [loading, setLoading] = useState(true);
   const [me, setMe] = useState<any>(null);
@@ -28,12 +28,15 @@ export default function ChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (!receiverId) return;
+
     const fetchData = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { window.location.href = '/inscription'; return; }
       setMe(session.user);
 
-      const { data: otherProf } = await supabase.from('profiles').select('*').eq('id', receiverId).single();
+      const { data: otherProf, error: profError } = await supabase.from('profiles').select('*').eq('id', receiverId).single();
+      if (profError) console.error("Erreur profil:", profError);
       setOtherUser(otherProf);
 
       const { data: msgs } = await supabase
@@ -103,11 +106,11 @@ export default function ChatPage() {
     let file_type = null;
 
     try {
+      // 1. Uploads
       if (fileToUpload) {
         file_type = fileToUpload.type;
         const ext = fileToUpload.name.split('.').pop();
         const path = `chat/${me.id}-${Date.now()}.${ext}`;
-        
         const { error: uploadError } = await supabase.storage.from('avatars').upload(path, fileToUpload);
         if (!uploadError) {
           const { data } = supabase.storage.from('avatars').getPublicUrl(path);
@@ -119,15 +122,15 @@ export default function ChatPage() {
         file_type = audioBlob.type;
         const ext = file_type.includes('mp4') ? 'mp4' : 'webm';
         const path = `chat/${me.id}-${Date.now()}.${ext}`;
-        
         const { error: uploadError } = await supabase.storage.from('avatars').upload(path, audioBlob);
         if (!uploadError) {
-          const { data } = supabase.storage.from('avatars').getPublicUrl(path);
+          const { data } = await supabase.storage.from('avatars').getPublicUrl(path);
           file_url = data.publicUrl;
         }
       }
 
-      const { error } = await supabase.from('messages').insert({
+      // 2. Insertion du message
+      const { error: msgError } = await supabase.from('messages').insert({
         sender_id: me.id,
         receiver_id: receiverId,
         content: newMessage.trim() || (audioBlob ? 'Message vocal' : 'Fichier'),
@@ -135,14 +138,34 @@ export default function ChatPage() {
         file_type
       });
 
-      if (!error) {
-        setNewMessage('');
-        setFileToUpload(null);
-        setAudioBlob(null);
-        scrollToBottom();
+      if (msgError) {
+        alert("❌ Erreur message : " + msgError.message);
+        return;
       }
+
+      // 3. Notification
+      try {
+        const { data: myProf } = await supabase.from('profiles').select('full_name').eq('id', me.id).single();
+        
+        await supabase.from('notifications').insert({
+          user_id: receiverId,
+          title: 'Nouveau message 💬',
+          message: `${myProf?.full_name || 'Quelqu\'un'} t'a envoyé un message.`,
+          type: 'message',
+          from_user_id: me.id
+        });
+      } catch (err: any) {
+        console.error("Erreur notif :", err.message);
+      }
+
+      // 4. Reset
+      setNewMessage('');
+      setFileToUpload(null);
+      setAudioBlob(null);
+      scrollToBottom();
+
     } catch (err: any) {
-      alert("Erreur d'envoi : " + err.message);
+      alert("Erreur globale : " + err.message);
     } finally {
       setUploading(false);
     }
@@ -184,9 +207,12 @@ export default function ChatPage() {
       
       {/* HEADER FIXE */}
       <div style={{ background: '#FFF', padding: '16px 24px', borderBottom: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', gap: '16px', position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100 }}>
-        <a href="/messages" style={{ color: '#F59E0B', background: '#FEF3C7', padding: '10px', borderRadius: '50%', display: 'flex' }}>
+        <button 
+          onClick={() => window.location.href = '/messages'} 
+          style={{ color: '#F59E0B', background: '#FEF3C7', padding: '10px', borderRadius: '50%', display: 'flex', border: 'none', cursor: 'pointer' }}
+        >
           <ArrowLeft size={20} />
-        </a>
+        </button>
         
         <div style={{ position: 'relative' }}>
           {otherUser?.avatar_url ? (
@@ -205,7 +231,7 @@ export default function ChatPage() {
         </div>
       </div>
 
-      {/* ZONE DE CHAT (avec marges pour le header fixe et le clavier) */}
+      {/* ZONE DE CHAT */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '24px', paddingTop: '90px', paddingBottom: '120px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
         {messages.map((msg) => {
           const isMine = msg.sender_id === me?.id;
@@ -213,7 +239,7 @@ export default function ChatPage() {
             <div key={msg.id} style={{ display: 'flex', justifyContent: isMine ? 'flex-end' : 'flex-start', alignItems: 'center', gap: '10px' }}>
               
               {isMine && (
-                <button onClick={() => deleteMessage(msg.id)} style={{ background: 'transparent', color: '#CBD5E1', cursor: 'pointer' }} title="Supprimer">
+                <button onClick={() => deleteMessage(msg.id)} style={{ background: 'transparent', color: '#CBD5E1', cursor: 'pointer', border: 'none' }} title="Supprimer">
                   <Trash2 size={16} />
                 </button>
               )}
@@ -233,7 +259,7 @@ export default function ChatPage() {
                   <div style={{ marginBottom: msg.content ? '8px' : '0', position: 'relative' }}>
                     <button 
                       onClick={() => downloadFile(msg.file_url, `fichier-${msg.id}`)}
-                      style={{ position: 'absolute', top: '8px', right: '8px', background: 'rgba(0,0,0,0.5)', color: '#FFF', padding: '6px', borderRadius: '50%', zIndex: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                      style={{ position: 'absolute', top: '8px', right: '8px', background: 'rgba(0,0,0,0.5)', color: '#FFF', padding: '6px', borderRadius: '50%', zIndex: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none' }}
                     >
                       <Download size={16} />
                     </button>
@@ -279,7 +305,7 @@ export default function ChatPage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#F1F5F9', padding: '8px 12px', borderRadius: '8px', marginBottom: '12px', width: 'fit-content' }}>
             <Paperclip size={16} color="#64748B" />
             <span style={{ fontSize: '13px', color: '#334155', fontWeight: 600 }}>{fileToUpload.name}</span>
-            <button onClick={() => setFileToUpload(null)} style={{ background: 'transparent', color: '#EF4444' }}><X size={16} /></button>
+            <button onClick={() => setFileToUpload(null)} style={{ background: 'transparent', color: '#EF4444', border: 'none' }}><X size={16} /></button>
           </div>
         )}
 
@@ -287,7 +313,7 @@ export default function ChatPage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#F1F5F9', padding: '8px 12px', borderRadius: '8px', marginBottom: '12px', width: 'fit-content' }}>
             <Mic size={16} color="#64748B" />
             <span style={{ fontSize: '13px', color: '#334155', fontWeight: 600 }}>Vocal prêt</span>
-            <button onClick={() => setAudioBlob(null)} style={{ background: 'transparent', color: '#EF4444' }}><X size={16} /></button>
+            <button onClick={() => setAudioBlob(null)} style={{ background: 'transparent', color: '#EF4444', border: 'none' }}><X size={16} /></button>
           </div>
         )}
 
@@ -312,7 +338,7 @@ export default function ChatPage() {
             style={{ flex: 1, padding: '14px 20px', borderRadius: '30px', border: '1px solid #E2E8F0', background: '#F8FAFC', outline: 'none', fontSize: '16px', minWidth: 0 }} 
           />
 
-          <button type="submit" disabled={uploading || (!newMessage.trim() && !fileToUpload && !audioBlob)} style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#F59E0B', color: '#FFF', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: (uploading || (!newMessage.trim() && !fileToUpload && !audioBlob)) ? 0.5 : 1, flexShrink: 0 }}>
+          <button type="submit" disabled={uploading || (!newMessage.trim() && !fileToUpload && !audioBlob)} style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#F59E0B', color: '#FFF', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: (uploading || (!newMessage.trim() && !fileToUpload && !audioBlob)) ? 0.5 : 1, flexShrink: 0, border: 'none' }}>
             {uploading ? <div style={{ width: '20px', height: '20px', border: '2px solid #FFF', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} /> : <Send size={20} />}
           </button>
         </form>

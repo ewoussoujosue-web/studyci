@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
-import { User, MessageCircle, UserPlus, UserCheck, CheckCircle, Flame, Award, Zap } from 'lucide-react';
+import { User, MessageCircle, UserPlus, UserCheck, CheckCircle, Flame, Award, Zap, GraduationCap } from 'lucide-react';
 import Loader from '@/components/Loader';
 
 export default function PublicProfilePage() {
@@ -25,7 +25,7 @@ export default function PublicProfilePage() {
       if (!session) { window.location.href = '/inscription'; return; }
       setMe(session.user);
 
-      // Récupérer mon nom pour l'afficher dans la notification
+      // Récupérer mon nom pour la notification
       const { data: myProf } = await supabase.from('profiles').select('full_name').eq('id', session.user.id).single();
       setMyName(myProf?.full_name || 'Quelqu\'un');
 
@@ -57,7 +57,7 @@ export default function PublicProfilePage() {
         setFollowing(true);
         setFollowersCount(c => c + 1);
 
-        // Créer une notification pour la personne suivie (sauf si je me suis suivi moi-même)
+        // Notification pour la personne suivie
         if (id !== me.id) {
           await supabase.from('notifications').insert({
             user_id: id,
@@ -76,7 +76,6 @@ export default function PublicProfilePage() {
 
   const imageUrl = profile.avatar_url && profile.avatar_url.startsWith('http') ? profile.avatar_url : null;
   
-  // On s'assure que skills est bien une chaîne de caractères avant de faire le split
   const skillList = (typeof profile.skills === 'string' && profile.skills.length > 0) 
     ? profile.skills.split(',').map((s: string) => s.trim()).filter((s: string) => s !== '') 
     : [];
@@ -106,11 +105,21 @@ export default function PublicProfilePage() {
             </motion.div>
 
             <div style={{ flex: 1, minWidth: '200px' }}>
-              <h1 style={{ fontSize: '28px', fontWeight: 800, color: '#0F172A' }}>{profile.full_name || 'Étudiant'}</h1>
-              <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginTop: '8px' }}>
+              <h1 style={{ fontSize: '28px', fontWeight: 800, color: '#0F172A', marginBottom: '8px' }}>{profile.full_name || 'Étudiant'}</h1>
+              
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                {/* BADGE NIVEAU */}
                 <span style={{ background: 'rgba(245,158,11,0.15)', color: '#B45309', padding: '4px 12px', borderRadius: '20px', fontWeight: 700, fontSize: '13px' }}>
                   {profile.level || 'Étudiant'}
                 </span>
+
+                {/* BADGE ÉCOLE (NOUVEAU) */}
+                {profile.school && (
+                  <span style={{ background: '#EFF6FF', color: '#1E40AF', padding: '4px 12px', borderRadius: '20px', fontWeight: 700, fontSize: '13px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <GraduationCap size={14} /> {profile.school}
+                  </span>
+                )}
+
                 <motion.p key={followersCount} initial={{ scale: 1.2 }} animate={{ scale: 1 }} style={{ color: '#64748B', fontSize: '14px', fontWeight: 500 }}>
                   {followersCount} abonné(s)
                 </motion.p>
@@ -155,8 +164,8 @@ export default function PublicProfilePage() {
             </motion.button>
             
             <motion.a href={`/chat/${id}`} whileHover={{ scale: 1.02, boxShadow: '0 10px 25px rgba(30,64,175,0.3)' }} whileTap={{ scale: 0.98 }}
-              style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '16px', background: 'linear-gradient(135deg, #1E40AF, #3B82F6)', color: '#FFF', borderRadius: '12px', fontWeight: '700', fontSize: '15px' }}>
-              <MessageCircle size={20} /> Envoyer un message
+              style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', padding: '16px 8px', background: 'linear-gradient(135deg, #1E40AF, #3B82F6)', color: '#FFF', borderRadius: '12px', fontWeight: 700, fontSize: '14px', textAlign: 'center' }}>
+              <MessageCircle size={18} /> Message
             </motion.a>
           </div>
 

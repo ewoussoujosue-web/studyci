@@ -7,11 +7,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 const TABS = [
   { id: 'all', label: 'Tout' },
-  { id: 'like', label: 'Likes', icon: Heart },
-  { id: 'comment', label: 'Comms', icon: MessageSquare },
-  { id: 'follow', label: 'Follows', icon: UserPlus },
-  { id: 'docs', label: 'Docs', icon: FileText },
-  { id: 'groups', label: 'Groupes', icon: Users },
+  { id: 'like', label: 'Likes' },
+  { id: 'comment', label: 'Comms' },
+  { id: 'follow', label: 'Follows' },
+  { id: 'message', label: 'Msgs' },
+  { id: 'docs', label: 'Docs' },
+  { id: 'groups', label: 'Groupes' },
 ];
 
 const DOC_TYPES = ['download', 'rating', 'doc_approved', 'doc_rejected'];
@@ -43,23 +44,20 @@ export default function NotificationBell() {
   useEffect(() => {
     fetchNotifications();
 
-    // Écouter les nouvelles notifications en temps réel
     const channel = supabase.channel('notifications_channel')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications' }, (payload: any) => {
-        // Ne pas ajouter si ce n'est pas pour moi
-        setNotifications(prev => [payload.new, ...prev]);
-        setUnreadCount(prev => prev + 1);
-      })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'notifications' }, (payload: any) => {
-        setNotifications(prev => prev.map(n => n.id === payload.new.id ? payload.new : n));
-        setUnreadCount(prev => {
-          const updated = notifications.map(n => n.id === payload.new.id ? payload.new : n);
-          return updated.filter((n: any) => !n.is_read).length;
-        });
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications' }, () => {
+        fetchNotifications(); 
       })
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    const interval = setInterval(() => {
+      fetchNotifications();
+    }, 10000);
+
+    return () => { 
+      supabase.removeChannel(channel); 
+      clearInterval(interval);
+    };
   }, []);
 
   const markAllAsRead = async () => {
@@ -71,13 +69,6 @@ export default function NotificationBell() {
     setUnreadCount(0);
   };
 
-  const markOneAsRead = async (id: string) => {
-    await supabase.from('notifications').update({ is_read: true }).eq('id', id);
-    setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
-    setUnreadCount(prev => Math.max(0, prev - 1));
-  };
-
-  // Filtrer selon l'onglet actif
   const filtered = notifications.filter(n => {
     if (activeTab === 'all') return true;
     if (activeTab === 'docs') return DOC_TYPES.includes(n.type);
@@ -85,7 +76,6 @@ export default function NotificationBell() {
     return n.type === activeTab;
   });
 
-  // Compter les non-lus par onglet
   const unreadByTab = (tabId: string) => {
     return notifications.filter(n => {
       if (n.is_read) return false;
@@ -96,7 +86,6 @@ export default function NotificationBell() {
     }).length;
   };
 
-  // Icône selon le type
   const getIcon = (type: string) => {
     switch (type) {
       case 'like': return <Heart size={16} color="#EF4444" fill="#EF4444" />;
@@ -108,6 +97,7 @@ export default function NotificationBell() {
       case 'doc_rejected': return <XCircle size={16} color="#EF4444" />;
       case 'group_invite': return <Users size={16} color="#F59E0B" />;
       case 'group_join': return <Users size={16} color="#8B5CF6" />;
+      case 'message': return <MessageSquare size={16} color="#3B82F6" />;
       default: return <Bell size={16} color="#64748B" />;
     }
   };
@@ -129,14 +119,12 @@ export default function NotificationBell() {
       <AnimatePresence>
         {isOpen && (
           <>
-            {/* Overlay pour fermer au clic extérieur (mobile friendly) */}
             <div onClick={() => setIsOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 99 }} />
             
             <motion.div 
               initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}
-              style={{ position: 'absolute', top: '100%', right: 0, width: '360px', maxWidth: '90vw', background: '#FFF', borderRadius: '16px', boxShadow: '0 10px 30px rgba(0,0,0,0.15)', border: '1px solid #E2E8F0', zIndex: 100, overflow: 'hidden' }}
+              style={{ position: 'absolute', top: '100%', right: 0, width: '380px', maxWidth: '95vw', background: '#FFF', borderRadius: '16px', boxShadow: '0 10px 30px rgba(0,0,0,0.15)', border: '1px solid #E2E8F0', zIndex: 100, overflow: 'hidden' }}
             >
-              {/* Header */}
               <div style={{ padding: '12px 16px', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#F8FAFC' }}>
                 <h3 style={{ fontSize: '15px', fontWeight: 800, color: '#0F172A' }}>Notifications</h3>
                 {unreadCount > 0 && (
@@ -146,7 +134,6 @@ export default function NotificationBell() {
                 )}
               </div>
 
-              {/* Tabs */}
               <div style={{ display: 'flex', overflowX: 'auto', borderBottom: '1px solid #E2E8F0', background: '#FFF' }}>
                 {TABS.map(tab => {
                   const count = unreadByTab(tab.id);
@@ -156,21 +143,12 @@ export default function NotificationBell() {
                       key={tab.id}
                       onClick={() => setActiveTab(tab.id)}
                       style={{
-                        flex: 1,
-                        minWidth: '60px',
-                        padding: '10px 8px',
+                        flex: 1, minWidth: '60px', padding: '10px 8px',
                         background: isActive ? '#EFF6FF' : 'transparent',
                         color: isActive ? '#1E40AF' : '#64748B',
-                        fontSize: '11px',
-                        fontWeight: 700,
-                        border: 'none',
+                        fontSize: '11px', fontWeight: 700, border: 'none',
                         borderBottom: isActive ? '2px solid #1E40AF' : '2px solid transparent',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        gap: '2px',
-                        whiteSpace: 'nowrap',
+                        cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px', whiteSpace: 'nowrap',
                       }}
                     >
                       <span>{tab.label}</span>
@@ -184,7 +162,6 @@ export default function NotificationBell() {
                 })}
               </div>
 
-              {/* Liste */}
               <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
                 {filtered.length === 0 ? (
                   <p style={{ padding: '30px 20px', textAlign: 'center', color: '#94A3B8', fontSize: '13px' }}>
@@ -194,15 +171,29 @@ export default function NotificationBell() {
                   filtered.map(n => (
                     <div
                       key={n.id}
-                      onClick={() => !n.is_read && markOneAsRead(n.id)}
+                      onClick={async () => {
+                        // 1. Marquer comme lu
+                        if (!n.is_read) {
+                          await supabase.from('notifications').update({ is_read: true }).eq('id', n.id);
+                          setNotifications(prev => prev.map(x => x.id === n.id ? { ...x, is_read: true } : x));
+                          setUnreadCount(prev => Math.max(0, prev - 1));
+                        }
+                        
+                        // 2. Redirection pour les messages
+                        if (n.type === 'message') {
+                          // On regarde si l'ID de l'expéditeur est là
+                          if (n.from_user_id) {
+                            window.location.href = `/chat/${n.from_user_id}`;
+                          } else {
+                            // Si l'ID est manquant (vieille notification), on alerte
+                            alert("Erreur : L'ID de l'expéditeur est manquant. Envoie-toi un nouveau message pour tester.");
+                          }
+                        }
+                      }}
                       style={{
-                        padding: '12px 16px',
-                        borderBottom: '1px solid #F1F5F9',
-                        background: n.is_read ? '#FFF' : '#EFF6FF',
-                        cursor: n.is_read ? 'default' : 'pointer',
-                        display: 'flex',
-                        gap: '10px',
-                        alignItems: 'flex-start',
+                        padding: '12px 16px', borderBottom: '1px solid #F1F5F9',
+                        background: n.is_read ? '#FFF' : '#EFF6FF', cursor: 'pointer',
+                        display: 'flex', gap: '10px', alignItems: 'flex-start',
                       }}
                     >
                       <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>

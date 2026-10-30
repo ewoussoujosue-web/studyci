@@ -1,18 +1,17 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
-import { User, MessageCircle, Search, Home, FileText, Users, MessageSquare, Calendar, Sparkles, LogOut, GraduationCap, Flame, Award, UserPlus, UserCheck, Check } from 'lucide-react';
+import { Search, User, MessageCircle, UserPlus, UserCheck, GraduationCap, ArrowLeft, Home, Users, MessageSquare } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import Loader from '@/components/Loader';
 
 export default function ReseauPage() {
   const [loading, setLoading] = useState(true);
+  const [me, setMe] = useState<any>(null);
   const [students, setStudents] = useState<any[]>([]);
+  const [following, setFollowing] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeFilter, setActiveFilter] = useState('Tous');
-  const [myProfile, setMyProfile] = useState<any>(null);
-  const [followingIds, setFollowingIds] = useState<string[]>([]);
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
@@ -23,217 +22,172 @@ export default function ReseauPage() {
   }, []);
 
   useEffect(() => {
-    const fetchNetwork = async () => {
+    const fetchData = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        
-        if (session?.user) {
-          await supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', session.user.id);
+        if (!session) { window.location.href = '/inscription'; return; }
+        setMe(session.user);
 
-          const { data: me } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
-          setMyProfile(me);
+        // Récupérer tous les étudiants (sauf moi)
+        const { data: profiles, error: profError } = await supabase
+          .from('profiles')
+          .select('*')
+          .neq('id', session.user.id)
+          .order('full_name', { ascending: true });
+          
+        if (profError) console.error("Erreur profils:", profError);
+        if (profiles) setStudents(profiles);
 
-          const { data: followsData } = await supabase.from('follows').select('following_id').eq('follower_id', session.user.id);
-          if (followsData) setFollowingIds(followsData.map(f => f.following_id));
-
-          const { data: all } = await supabase
-            .from('profiles')
-            .select('*')
-            .neq('id', session.user.id)
-            .order('created_at', { ascending: false });
-
-          if (all) {
-            const studentsWithStats = await Promise.all(all.map(async (student) => {
-              const { count: followersCount } = await supabase.from('follows').select('*', { count: 'exact', head: true }).eq('following_id', student.id);
-              const { count: docsCount } = await supabase.from('documents').select('*', { count: 'exact', head: true }).eq('uploader_id', student.id).eq('status', 'approved');
-              return { ...student, followersCount: followersCount || 0, docsCount: docsCount || 0 };
-            }));
-            setStudents(studentsWithStats);
-          }
+        // Récupérer les follows
+        const { data: followsData } = await supabase
+          .from('follows')
+          .select('following_id')
+          .eq('follower_id', session.user.id);
+          
+        if (followsData) {
+          setFollowing(followsData.map(f => f.following_id));
         }
       } catch (err) {
-        console.error("Erreur:", err);
+        console.error(err);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchNetwork();
+    fetchData();
   }, []);
 
-  const toggleFollow = async (studentId: string) => {
-    if (!myProfile) return;
-    if (followingIds.includes(studentId)) {
-      setFollowingIds(followingIds.filter(id => id !== studentId));
-      setStudents(students.map(s => s.id === studentId ? { ...s, followersCount: Math.max(0, s.followersCount - 1) } : s));
-      await supabase.from('follows').delete().eq('follower_id', myProfile.id).eq('following_id', studentId);
+  const toggleFollow = async (targetId: string) => {
+    if (!me) return;
+    const isFollowing = following.includes(targetId);
+
+    if (isFollowing) {
+      await supabase.from('follows').delete().eq('follower_id', me.id).eq('following_id', targetId);
+      setFollowing(following.filter(id => id !== targetId));
     } else {
-      setFollowingIds([...followingIds, studentId]);
-      setStudents(students.map(s => s.id === studentId ? { ...s, followersCount: s.followersCount + 1 } : s));
-      await supabase.from('follows').insert({ follower_id: myProfile.id, following_id: studentId });
+      const { error } = await supabase.from('follows').insert({ follower_id: me.id, following_id: targetId });
+      if (!error) {
+        setFollowing([...following, targetId]);
+      }
     }
   };
 
-  const logout = async () => {
-    await supabase.auth.signOut();
-    window.location.href = '/';
-  };
+  // Filtrer uniquement par la recherche texte (nom, école, niveau)
+  const filteredStudents = students.filter(s => {
+    const term = searchQuery.toLowerCase();
+    return (
+      (s.full_name || '').toLowerCase().includes(term) ||
+      (s.school || '').toLowerCase().includes(term) ||
+      (s.level || '').toLowerCase().includes(term)
+    );
+  });
 
   if (loading) return <Loader text="Chargement du réseau..." />;
 
-  // Filtres façon Facebook
-  const filters = ['Tous', 'En ligne', 'Mon École', 'Droit', 'Compta', 'Médecine'];
-
-  const filteredStudents = students.filter(s => {
-    const matchesSearch = s.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) || s.level?.toLowerCase().includes(searchQuery.toLowerCase()) || s.school?.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    let matchesFilter = false;
-    if (activeFilter === 'Tous') matchesFilter = true;
-    else if (activeFilter === 'En ligne') {
-      const diff = new Date().getTime() - new Date(s.last_seen).getTime();
-      matchesFilter = diff < 5 * 60 * 1000;
-    }
-    else if (activeFilter === 'Mon École') matchesFilter = s.school === myProfile?.school && s.school != null;
-    else matchesFilter = s.level?.toLowerCase().includes(activeFilter.toLowerCase());
-
-    return matchesSearch && matchesFilter;
-  });
-
-  const isUserOnline = (lastSeen: string) => {
-    if (!lastSeen) return false;
-    const diff = new Date().getTime() - new Date(lastSeen).getTime();
-    return diff < 5 * 60 * 1000;
-  };
-
   return (
-    <div style={{ minHeight: '100vh', background: '#F8FAFC', display: 'flex', justifyContent: 'center' }}>
-      
-      <div className="main-content-layout" style={{ display: 'flex', width: '100%', maxWidth: '1300px' }}>
+    <div style={{ minHeight: '100vh', background: '#F8FAFC', paddingBottom: isMobile ? '100px' : '40px' }}>
+      <div style={{ maxWidth: '800px', margin: '0 auto', padding: isMobile ? '20px 16px' : '40px 24px' }}>
         
-        {/* SIDEBAR GAUCHE */}
-        <div className="sidebar-desktop" style={{ width: '260px', padding: '20px', borderRight: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', position: 'sticky', top: 0, height: '100vh', background: '#F8FAFC' }}>
-          <h1 style={{ fontSize: '28px', fontWeight: 800, color: '#0F172A', marginBottom: '32px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div style={{ width: '32px', height: '32px', background: '#F59E0B', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFF', fontSize: '18px' }}>S</div>
-            StudyCI
-          </h1>
+        {/* HEADER */}
+        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '24px' }}>
+          <a href="/" style={{ color: '#F59E0B', background: '#FEF3C7', padding: '10px', borderRadius: '50%', display: 'flex' }}>
+            <ArrowLeft size={24} />
+          </a>
+          <h1 style={{ fontSize: isMobile ? '28px' : '36px', fontWeight: 800, color: '#0F172A', letterSpacing: '-1px' }}>Le Réseau</h1>
+        </motion.div>
 
-          <nav style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
-            <a href="/" style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '12px 16px', borderRadius: '12px', color: '#334155', fontWeight: 600, textDecoration: 'none', fontSize: '16px' }}><Home size={24} /> Accueil</a>
-            <a href="/search" style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '12px 16px', borderRadius: '12px', color: '#334155', fontWeight: 600, textDecoration: 'none', fontSize: '16px' }}><FileText size={24} /> Annales</a>
-            <a href="/reseau" style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '12px 16px', borderRadius: '12px', background: '#EFF6FF', color: '#1E40AF', fontWeight: 700, textDecoration: 'none', fontSize: '16px' }}><Users size={24} /> Réseau</a>
-            <a href="/groupes" style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '12px 16px', borderRadius: '12px', color: '#334155', fontWeight: 600, textDecoration: 'none', fontSize: '16px' }}><MessageSquare size={24} /> Groupes</a>
-            <a href="/planning" style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '12px 16px', borderRadius: '12px', color: '#334155', fontWeight: 600, textDecoration: 'none', fontSize: '16px' }}><Calendar size={24} /> Planning</a>
-            <a href="/mon-ia" style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '12px 16px', borderRadius: '12px', color: '#334155', fontWeight: 600, textDecoration: 'none', fontSize: '16px' }}><Sparkles size={24} color="#8B5CF6" /> Mon IA</a>
-          </nav>
-
-          {myProfile && (
-            <div style={{ borderTop: '1px solid #E2E8F0', paddingTop: '16px', marginTop: 'auto' }}>
-              <a href="/profile" style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', borderRadius: '12px', background: '#FFF', border: '1px solid #E2E8F0', textDecoration: 'none', marginBottom: '12px' }}>
-                {myProfile.avatar_url ? <img src={myProfile.avatar_url} style={{ width: '40px', height: '40px', borderRadius: '50%' }} /> : <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><User size={20} color="#94A3B8" /></div>}
-                <div style={{ flex: 1, overflow: 'hidden' }}>
-                  <p style={{ fontSize: '14px', fontWeight: 700, color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{myProfile.full_name || 'Mon Profil'}</p>
-                  <p style={{ fontSize: '12px', color: '#64748B' }}>{myProfile.level || 'Étudiant'}</p>
-                </div>
-              </a>
-              <button onClick={logout} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px', borderRadius: '12px', background: 'transparent', color: '#EF4444', fontWeight: 600, fontSize: '16px' }}><LogOut size={24} /> Déconnexion</button>
-            </div>
-          )}
+        {/* BARRE DE RECHERCHE */}
+        <div style={{ position: 'relative', marginBottom: '24px' }}>
+          <Search size={20} color="#94A3B8" style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)' }} />
+          <input 
+            value={searchQuery} 
+            onChange={(e) => setSearchQuery(e.target.value)} 
+            placeholder="Rechercher un étudiant (nom, école, niveau)..." 
+            style={{ width: '100%', padding: '16px 16px 16px 48px', background: '#FFF', border: '1px solid #E2E8F0', borderRadius: '30px', fontSize: '15px', outline: 'none', color: '#0F172A', boxShadow: '0 2px 10px rgba(0,0,0,0.02)' }} 
+          />
         </div>
 
-        {/* CONTENU CENTRAL */}
-        <div style={{ flex: 1, minWidth: '0', background: '#FFF', width: '100%' }}>
-          
-          <div style={{ position: 'sticky', top: 0, zIndex: 50, background: 'rgba(255,255,255,0.95)', backdropFilter: 'blur(12px)', borderBottom: '1px solid #E2E8F0', padding: isMobile ? '16px' : '20px' }}>
-            <h2 style={{ fontSize: '24px', fontWeight: 800, color: '#0F172A', marginBottom: '16px' }}>Le Réseau</h2>
-            
-            <div style={{ position: 'relative', width: '100%' }}>
-              <Search size={20} color="#94A3B8" style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)' }} />
-              <input 
-                type="text" 
-                placeholder="Rechercher un étudiant..." 
-                value={searchQuery} 
-                onChange={(e) => setSearchQuery(e.target.value)} 
-                style={{ width: '100%', padding: '14px 20px 14px 48px', borderRadius: '50px', border: '1px solid #E2E8F0', background: '#F8FAFC', fontSize: '15px', outline: 'none' }} 
-              />
-            </div>
-
-            <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingTop: '16px', scrollbarWidth: 'none' }}>
-              {filters.map(f => (
-                <button 
-                  key={f} 
-                  onClick={() => setActiveFilter(f)}
-                  style={{ padding: '8px 16px', borderRadius: '50px', fontSize: '13px', fontWeight: 700, whiteSpace: 'nowrap', background: activeFilter === f ? '#0F172A' : '#F1F5F9', color: activeFilter === f ? '#FFF' : '#64748B', border: 'none' }}>
-                  {f}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div style={{ padding: isMobile ? '16px' : '20px' }}>
+        {/* LISTE DES ÉTUDIANTS */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <AnimatePresence>
             {filteredStudents.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '60px 20px', background: '#FFF', borderRadius: '24px', border: '1px solid #E2E8F0' }}>
-                <Users size={64} color="#CBD5E1" style={{ margin: '0 auto 16px' }} />
-                <h3 style={{ fontSize: '20px', fontWeight: 800, color: '#0F172A' }}>Aucun étudiant trouvé</h3>
-              </div>
+               <p style={{ textAlign: 'center', color: '#64748B', marginTop: '20px' }}>Aucun étudiant trouvé.</p>
             ) : (
-              <motion.div layout style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px' }}>
-                {filteredStudents.map((s) => (
+              filteredStudents.map((student) => {
+                const isFollowed = following.includes(student.id);
+
+                return (
                   <motion.div 
-                    key={s.id} layout initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
-                    style={{ background: '#FFF', borderRadius: '20px', padding: '16px', display: 'flex', alignItems: 'center', gap: '16px', border: '1px solid #E2E8F0' }}>
-                    
-                    <div style={{ position: 'relative' }}>
-                      {s.avatar_url ? <img src={s.avatar_url} style={{ width: '60px', height: '60px', borderRadius: '50%', objectFit: 'cover' }} /> : <div style={{ width: '60px', height: '60px', borderRadius: '50%', background: '#F8FAFC', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><User size={28} color="#F59E0B" /></div>}
-                      {isUserOnline(s.last_seen) && (
-                        <div style={{ position: 'absolute', bottom: '2px', right: '2px', width: '14px', height: '14px', background: '#10B981', borderRadius: '50%', border: '2px solid #FFF' }} />
+                    key={student.id}
+                    initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                    style={{ background: '#FFF', borderRadius: '20px', padding: '20px', border: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}
+                  >
+                    {/* AVATAR */}
+                    <div style={{ position: 'relative', flexShrink: 0 }}>
+                      {student.avatar_url ? (
+                        <img src={student.avatar_url} style={{ width: '70px', height: '70px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #F1F5F9' }} />
+                      ) : (
+                        <div style={{ width: '70px', height: '70px', borderRadius: '50%', background: '#F8FAFC', border: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <User size={32} color="#F59E0B" />
+                        </div>
                       )}
                     </div>
 
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <h3 style={{ fontSize: '16px', fontWeight: 800, color: '#0F172A' }}>{s.full_name || 'Étudiant'}</h3>
-                        {s.docsCount >= 5 && <Award size={14} color="#3B82F6" />}
-                      </div>
-                      <p style={{ fontSize: '12px', color: '#64748B' }}>{s.level || 'Niveau inconnu'}</p>
+                    {/* INFOS */}
+                    <div style={{ flex: 1, minWidth: '150px' }}>
+                      <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', marginBottom: '4px' }}>{student.full_name}</h3>
                       
-                      <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
-                        <a href={`/profile/${s.id}`} style={{ flex: 1, padding: '8px', background: '#EFF6FF', color: '#1E40AF', borderRadius: '8px', fontWeight: 700, fontSize: '12px', textAlign: 'center', textDecoration: 'none' }}>
-                          Profil
-                        </a>
-                        <button onClick={() => toggleFollow(s.id)} style={{ flex: 1, padding: '8px', background: followingIds.includes(s.id) ? '#F1F5F9' : '#1E40AF', color: followingIds.includes(s.id) ? '#64748B' : '#FFF', borderRadius: '8px', fontWeight: 700, fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', border: 'none' }}>
-                          {followingIds.includes(s.id) ? <><Check size={14} /> Abonné</> : <><UserPlus size={14} /> Suivre</>}
-                        </button>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '4px' }}>
+                        <span style={{ fontSize: '13px', color: '#64748B', fontWeight: 600 }}>{student.level || 'Étudiant'}</span>
+                        
+                        {/* 🎓 AFFICHAGE DE L'ÉCOLE */}
+                        {student.school && (
+                          <>
+                            <span style={{ color: '#CBD5E1' }}>•</span>
+                            <span style={{ fontSize: '13px', color: '#1E40AF', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <GraduationCap size={14} /> {student.school}
+                            </span>
+                          </>
+                        )}
                       </div>
                     </div>
+
+                    {/* BOUTONS D'ACTION */}
+                    <div style={{ display: 'flex', gap: '8px', width: isMobile ? '100%' : 'auto', marginTop: isMobile ? '8px' : '0' }}>
+                      
+                      <a href={`/profile/${student.id}`} style={{ flex: isMobile ? 1 : 'none', padding: '10px 16px', background: '#F1F5F9', color: '#1E40AF', borderRadius: '12px', fontWeight: 700, fontSize: '14px', textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        Profil
+                      </a>
+
+                      {/* 💬 BOUTON MESSAGE */}
+                      <a href={`/chat/${student.id}`} style={{ flex: isMobile ? 1 : 'none', padding: '10px', background: '#EFF6FF', color: '#1E40AF', borderRadius: '12px', fontWeight: 700, textDecoration: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Envoyer un message">
+                        <MessageCircle size={20} />
+                      </a>
+                      
+                      <button onClick={() => toggleFollow(student.id)} style={{ flex: isMobile ? 1 : 'none', padding: '10px 16px', borderRadius: '12px', fontWeight: 700, fontSize: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', border: isFollowed ? '1px solid #E2E8F0' : 'none', cursor: 'pointer', background: isFollowed ? '#FFF' : '#1E40AF', color: isFollowed ? '#64748B' : '#FFF' }}>
+                        {isFollowed ? <><UserCheck size={18} /> Abonné</> : <><UserPlus size={18} /> Suivre</>}
+                      </button>
+                    </div>
+
                   </motion.div>
-                ))}
-              </motion.div>
+                );
+              })
             )}
-          </div>
+          </AnimatePresence>
         </div>
       </div>
 
       {/* BARRE DE NAVIGATION MOBILE */}
-      <div className="mobile-nav-bar">
-        <a href="/" className="mobile-nav-item">
-          <Home size={22} />
-        </a>
-        <a href="/search" className="mobile-nav-item">
-          <Search size={22} />
-        </a>
-        <a href="/reseau" className="mobile-nav-item active">
-          <Users size={22} />
-        </a>
-        <a href="/messages" className="mobile-nav-item">
-          <MessageSquare size={22} />
-        </a>
-        <a href="/groupes" className="mobile-nav-item">
-          <MessageSquare size={22} />
-        </a>
-        <a href="/profile" className="mobile-nav-item">
-          <User size={22} />
-        </a>
-      </div>
+      {isMobile && (
+        <div className="mobile-nav-bar">
+          <a href="/" className="mobile-nav-item"><Home size={22} /></a>
+          <a href="/search" className="mobile-nav-item"><Search size={22} /></a>
+          <a href="/reseau" className="mobile-nav-item active"><Users size={22} /></a>
+          <a href="/messages" className="mobile-nav-item"><MessageSquare size={22} /></a>
+          <a href="/groupes" className="mobile-nav-item"><MessageSquare size={22} /></a>
+          <a href="/profile" className="mobile-nav-item"><User size={22} /></a>
+        </div>
+      )}
     </div>
   );
 }
