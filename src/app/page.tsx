@@ -323,6 +323,14 @@ function PostCard({ post, isLiked, onLike, onDelete, isMine, currentUser, onComm
     setIsSubmitting(false);
   };
 
+  const deleteComment = async (commentId: string) => {
+    if (!confirm("Supprimer ce commentaire ?")) return;
+    const { error } = await supabase.from('post_comments').delete().eq('id', commentId);
+    if (!error) {
+      onCommentAdded();
+    }
+  };
+
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, height: 0 }} style={{ padding: '16px 20px', borderBottom: '1px solid #E2E8F0', background: '#FFF', marginBottom: '8px' }}>
       <div style={{ display: 'flex', gap: '12px' }}>
@@ -389,6 +397,11 @@ function PostCard({ post, isLiked, onLike, onDelete, isMine, currentUser, onComm
                           </a>
                           <span style={{ fontSize: '11px', color: '#94A3B8' }}>· {timeAgo(comment.created_at)}</span>
                         </div>
+                        {currentUser?.id === comment.user_id && (
+                          <button onClick={() => deleteComment(comment.id)} style={{ background: 'transparent', color: '#CBD5E1', padding: '4px', display: 'flex' }} aria-label="Supprimer le commentaire">
+                            <Trash2 size={14} />
+                          </button>
+                        )}
                       </div>
                       <p style={{ fontSize: '14px', color: '#334155' }}>{comment.content}</p>
                     </div>

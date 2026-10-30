@@ -17,12 +17,17 @@ export default function PublicProfilePage() {
   const [followersCount, setFollowersCount] = useState(0);
   const [docCount, setDocCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [myName, setMyName] = useState<string>('');
 
   useEffect(() => {
     (async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { window.location.href = '/inscription'; return; }
       setMe(session.user);
+
+      // Récupérer mon nom pour l'afficher dans la notification
+      const { data: myProf } = await supabase.from('profiles').select('full_name').eq('id', session.user.id).single();
+      setMyName(myProf?.full_name || 'Quelqu\'un');
 
       const { data: prof } = await supabase.from('profiles').select('*').eq('id', id).single();
       setProfile(prof);
@@ -47,9 +52,21 @@ export default function PublicProfilePage() {
       setFollowing(false);
       setFollowersCount(c => Math.max(0, c - 1));
     } else {
-      await supabase.from('follows').insert({ follower_id: me.id, following_id: id });
-      setFollowing(true);
-      setFollowersCount(c => c + 1);
+      const { error } = await supabase.from('follows').insert({ follower_id: me.id, following_id: id });
+      if (!error) {
+        setFollowing(true);
+        setFollowersCount(c => c + 1);
+
+        // Créer une notification pour la personne suivie (sauf si je me suis suivi moi-même)
+        if (id !== me.id) {
+          await supabase.from('notifications').insert({
+            user_id: id,
+            title: 'Nouvel abonné 👥',
+            message: `${myName} a commencé à te suivre.`,
+            type: 'follow'
+          });
+        }
+      }
     }
   };
 
@@ -138,7 +155,7 @@ export default function PublicProfilePage() {
             </motion.button>
             
             <motion.a href={`/chat/${id}`} whileHover={{ scale: 1.02, boxShadow: '0 10px 25px rgba(30,64,175,0.3)' }} whileTap={{ scale: 0.98 }}
-              style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '16px', background: 'linear-gradient(135deg, #1E40AF, #3B82F6)', color: '#FFF', borderRadius: '12px', fontWeight: 700, fontSize: '15px' }}>
+              style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '16px', background: 'linear-gradient(135deg, #1E40AF, #3B82F6)', color: '#FFF', borderRadius: '12px', fontWeight: '700', fontSize: '15px' }}>
               <MessageCircle size={20} /> Envoyer un message
             </motion.a>
           </div>

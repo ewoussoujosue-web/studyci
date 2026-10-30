@@ -80,6 +80,7 @@ function SearchContent() {
   const [uploadCount, setUploadCount] = useState(0);
   const [isAdmin, setIsAdmin] = useState(false);
   const [me, setMe] = useState<any>(null);
+  const [myName, setMyName] = useState<string>('');
   const [isMobile, setIsMobile] = useState(false);
 
   const [showFilters, setShowFilters] = useState(false);
@@ -101,6 +102,10 @@ function SearchContent() {
 
       setMe(session.user);
       const user = session.user;
+
+      // Récupérer mon nom pour les notifications
+      const { data: myProf } = await supabase.from('profiles').select('full_name').eq('id', user.id).single();
+      setMyName(myProf?.full_name || 'Quelqu\'un');
       
       let orderCol = sortBy === 'popular' ? 'download_count' : 'created_at';
       
@@ -139,7 +144,7 @@ function SearchContent() {
     setTimeout(() => setToast(t => ({ ...t, show: false })), 2000);
   };
 
-  // --- FONCTION DE TÉLÉCHARGEMENT (DÉBLOCAGE À 1 DOCUMENT) ---
+  // --- FONCTION DE TÉLÉCHARGEMENT (avec fallback iOS + notif download) ---
   const download = async (doc: any) => {
     if (!isAdmin && uploadCount < 1) {
       setToast({ msg: "Tu dois uploader 1 document pour débloquer les téléchargements !", type: 'error', show: true });
@@ -147,21 +152,103 @@ function SearchContent() {
       return;
     }
 
+    // ⚡ iOS SAFARI : on ouvre la fenêtre IMMÉDIATEMENT (synchrone) avant tout await.
+    // Sinon Safari bloque le popup car il n'y a plus de "user gesture" après l'await.
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+    let iosWindow: Window | null = null;
+    if (isIOS) {
+      iosWindow = window.open('', '_blank');
+    }
+
     try {
-      const { data, error } = await supabase.storage.from('documents').createSignedUrl(doc.file_path, 60);
-      
+      const ext = doc.file_path.split('.').pop() || 'pdf';
+      const safeTitle = (doc.title || 'document').replace(/[^a-zA-Z0-9-_ ]/g, '').trim();
+      const fileName = `${safeTitle}.${ext}`;
+
+      // 1. Récupérer le fichier en blob
+      const { data, error } = await supabase.storage.from('documents').download(doc.file_path);
+
       if (error || !data) {
-        alert('Erreur de téléchargement');
+        if (iosWindow) iosWindow.close();
+        setToast({ msg: "Erreur de téléchargement", type: 'error', show: true });
+        setTimeout(() => setToast(t => ({ ...t, show: false })), 3000);
         return;
       }
 
+      // 2. Créer l'URL blob
+      const blobUrl = URL.createObjectURL(data);
+
+      if (isIOS && iosWindow) {
+        // 🍎 iOS : on redirige la fenêtre déjà ouverte vers le blob
+        // → iOS affiche le PDF avec un bouton "Partager" natif pour sauvegarder
+        iosWindow.location.href = blobUrl;
+      } else {
+        // 🤖 Android / Desktop : téléchargement direct via <a download>
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = fileName;
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        setTimeout(() => {
+          document.body.removeChild(link);
+          URL.revokeObjectURL(blobUrl);
+        }, 1000);
+      }
+
+      // 3. Incrémenter le compteur
       await supabase.from('documents').update({ download_count: (doc.download_count || 0) + 1 }).eq('id', doc.id);
 
-      // Ouvre le PDF dans un nouvel onglet, ce qui marche sur mobile
-      window.open(data.signedUrl, '_blank');
+      // 4. Créer/mettre à jour la notification pour l'auteur du doc
+      //    Anti-spam : 1 seule notif par doc + par jour (mise à jour du compteur)
+      if (doc.uploader_id && doc.uploader_id !== me?.id) {
+        try {
+          const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+          // Chercher une notif download récente pour ce doc
+          const { data: existing } = await supabase
+            .from('notifications')
+            .select('id, message')
+            .eq('user_id', doc.uploader_id)
+            .eq('type', 'download')
+            .ilike('message', `%${doc.title}%`)
+            .gte('created_at', oneDayAgo)
+            .limit(1)
+            .maybeSingle();
+
+          if (existing) {
+            // Extraire le compteur actuel et l'incrémenter
+            const match = existing.message.match(/(\d+)\s+personne/);
+            const currentCount = match ? parseInt(match[1]) : 1;
+            const newCount = currentCount + 1;
+
+            await supabase.from('notifications').update({
+              message: `${newCount} personne${newCount > 1 ? 's ont' : ' a'} téléchargé "${doc.title}" aujourd'hui.`,
+              is_read: false,
+              created_at: new Date().toISOString()
+            }).eq('id', existing.id);
+          } else {
+            // Première notif du jour pour ce doc
+            await supabase.from('notifications').insert({
+              user_id: doc.uploader_id,
+              title: 'Nouveau téléchargement 📥',
+              message: `${myName} a téléchargé "${doc.title}".`,
+              type: 'download'
+            });
+          }
+        } catch (notifErr) {
+          // On ne bloque pas le téléchargement si la notif échoue
+          console.error('Notif download error:', notifErr);
+        }
+      }
+
+      setToast({ msg: "Téléchargement lancé 📥", type: 'success', show: true });
+      setTimeout(() => setToast(t => ({ ...t, show: false })), 3000);
 
     } catch (err: any) {
-      alert("Erreur : " + err.message);
+      if (iosWindow) iosWindow.close();
+      setToast({ msg: "Erreur : " + err.message, type: 'error', show: true });
+      setTimeout(() => setToast(t => ({ ...t, show: false })), 3000);
     }
   };
 
