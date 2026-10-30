@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, X, User as UserIcon, Trash2 } from 'lucide-react';
+import { Plus, X, User as UserIcon, Trash2, Eye } from 'lucide-react';
 
 export default function StoriesBar({ profile }: { profile: any }) {
   const [stories, setStories] = useState<any[]>([]);
@@ -18,8 +18,24 @@ export default function StoriesBar({ profile }: { profile: any }) {
   // États pour la visionneuse
   const [activeStoryIndex, setActiveStoryIndex] = useState<number | null>(null);
   const [progress, setProgress] = useState(0);
+  const [viewers, setViewers] = useState<any[]>([]);
+
+  // Fonction pour calculer le temps écoulé
+  const timeAgo = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+    
+    if (seconds < 60) return "À l'instant";
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes} min`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours} h`;
+    return `${Math.floor(hours / 24)} j`;
+  };
 
   const loadStories = async () => {
+    // Filtre des 24h (86400 secondes)
     const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     
     const { data } = await supabase
@@ -36,11 +52,35 @@ export default function StoriesBar({ profile }: { profile: any }) {
     loadStories();
   }, []);
 
+  // --- ENREGISTRER LA VUE ET CHARGER LES SPECTATEURS ---
+  useEffect(() => {
+    if (activeStoryIndex !== null && stories[activeStoryIndex]) {
+      const story = stories[activeStoryIndex];
+      
+      // Si ce n'est pas ma story, j'enregistre ma vue
+      if (story.user_id !== profile?.id) {
+        supabase.from('story_views').insert({ story_id: story.id, viewer_id: profile?.id }).then();
+      }
+
+      // Si c'est ma story, je récupère la liste des spectateurs
+      if (story.user_id === profile?.id) {
+        const fetchViewers = async () => {
+          const { data } = await supabase
+            .from('story_views')
+            .select('*, profiles(full_name, avatar_url)')
+            .eq('story_id', story.id);
+          setViewers(data || []);
+        };
+        fetchViewers();
+      }
+    }
+  }, [activeStoryIndex, stories, profile]);
+
   // GESTION DU DÉFILEMENT AUTOMATIQUE
   useEffect(() => {
     if (activeStoryIndex !== null) {
       setProgress(0);
-      const duration = 5000; // 5 secondes par story
+      const duration = 5000; 
       const interval = 50; 
       const step = (interval / duration) * 100;
 
@@ -75,7 +115,6 @@ export default function StoriesBar({ profile }: { profile: any }) {
     }
   };
 
-  // --- FONCTION DE CRÉATION (Corrigée avec media_url et media_type) ---
   const handleCreateStory = async (e: React.FormEvent) => {
     e.preventDefault();
     if ((!storyText.trim() && !storyFile) || !profile) return;
@@ -97,7 +136,6 @@ export default function StoriesBar({ profile }: { profile: any }) {
         media_url = data.publicUrl;
       }
 
-      // ⚠️ ON ENVOIE DANS 'media_url' et 'media_type'
       const { error: dbError } = await supabase.from('stories').insert({
         user_id: profile.id,
         content: storyText.trim() ? storyText.trim() : null,
@@ -113,14 +151,12 @@ export default function StoriesBar({ profile }: { profile: any }) {
       loadStories();
       
     } catch (err: any) {
-      console.error("Erreur Supabase :", err);
       alert("Impossible de publier la story. Erreur : " + err.message);
     } finally {
       setUploading(false);
     }
   };
 
-  // --- FONCTION DE SUPPRESSION ---
   const handleDeleteStory = async (story: any) => {
     if (!confirm("Supprimer cette story ?")) return;
     
@@ -129,22 +165,14 @@ export default function StoriesBar({ profile }: { profile: any }) {
       setStories(stories.filter(s => s.id !== story.id));
 
       const { error } = await supabase.from('stories').delete().eq('id', story.id);
-      
-      if (error) {
-        console.error("Erreur Supabase :", error);
-        alert("Erreur de suppression : " + error.message);
-        loadStories();
-        return;
-      }
+      if (error) throw error;
 
       if (story.media_url) {
         const pathParts = story.media_url.split('/avatars/');
         if (pathParts.length > 1) {
-          const filePath = pathParts[1];
-          supabase.storage.from('avatars').remove([filePath]).catch(e => console.log("Erreur suppression image:", e));
+          supabase.storage.from('avatars').remove([pathParts[1]]).catch(e => console.log(e));
         }
       }
-
     } catch (err: any) {
       alert("Erreur : " + err.message);
     }
@@ -170,7 +198,7 @@ export default function StoriesBar({ profile }: { profile: any }) {
           <span style={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>Ma story</span>
         </div>
 
-        {/* LISTE DES STORIES (Corrigée avec media_type) */}
+        {/* LISTE DES STORIES */}
         {stories.map((story, index) => (
           <div key={story.id} onClick={() => setActiveStoryIndex(index)} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', cursor: 'pointer', minWidth: '72px' }}>
             <div style={{ width: '72px', height: '72px', borderRadius: '50%', padding: '3px', background: 'linear-gradient(45deg, #F59E0B, #EF4444, #8B5CF6)' }}>
@@ -215,7 +243,7 @@ export default function StoriesBar({ profile }: { profile: any }) {
         )}
       </AnimatePresence>
 
-      {/* --- VISIONNEUSE DE STORY (Corrigée avec media_type) --- */}
+      {/* --- VISIONNEUSE DE STORY --- */}
       <AnimatePresence>
         {activeStory && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.95)', zIndex: 9999, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
@@ -231,7 +259,12 @@ export default function StoriesBar({ profile }: { profile: any }) {
 
               <div style={{ position: 'absolute', top: '30px', left: '16px', right: '16px', display: 'flex', alignItems: 'center', gap: '12px', zIndex: 30 }}>
                 {activeStory.profiles?.avatar_url ? <img src={activeStory.profiles.avatar_url} style={{ width: '32px', height: '32px', borderRadius: '50%' }} /> : <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#475569' }} />}
-                <p style={{ color: '#FFF', fontWeight: 700, fontSize: '14px', textShadow: '0 2px 4px rgba(0,0,0,0.5)', flex: 1 }}>{activeStory.profiles?.full_name}</p>
+                
+                <div style={{ flex: 1 }}>
+                  <p style={{ color: '#FFF', fontWeight: 700, fontSize: '14px', textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>{activeStory.profiles?.full_name}</p>
+                  {/* TEMPS ÉCOULÉ (PUBLIC) */}
+                  <p style={{ color: '#CBD5E1', fontSize: '11px', fontWeight: 500 }}>{timeAgo(activeStory.created_at)}</p>
+                </div>
                 
                 {isMyActiveStory && (
                   <button 
@@ -259,10 +292,30 @@ export default function StoriesBar({ profile }: { profile: any }) {
               )}
 
               {activeStory.media_url && activeStory.content && (
-                <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.8), transparent)', padding: '40px 20px 20px' }}>
+                <div style={{ position: 'absolute', bottom: '60px', left: 0, right: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.8), transparent)', padding: '40px 20px 20px' }}>
                   <p style={{ color: '#FFF', fontSize: '16px', fontWeight: 600 }}>{activeStory.content}</p>
                 </div>
               )}
+
+              {/* ZONE DES SPECTATEURS (Si c'est ma story) */}
+              {isMyActiveStory && (
+                <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(5px)', padding: '12px 20px', zIndex: 30, display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <Eye size={18} color="#FFF" />
+                  <span style={{ color: '#FFF', fontSize: '13px', fontWeight: 600 }}>{viewers.length} vue(s)</span>
+                  <div style={{ display: 'flex', gap: '-8px' }}>
+                    {viewers.slice(0, 5).map((v, i) => (
+                      <div key={v.id} style={{ width: '28px', height: '28px', borderRadius: '50%', border: '2px solid #1E293B', marginLeft: i > 0 ? '-10px' : '0', overflow: 'hidden' }}>
+                        {v.profiles?.avatar_url ? (
+                          <img src={v.profiles.avatar_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ) : (
+                          <div style={{ width: '100%', height: '100%', background: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><UserIcon size={12} color="#FFF" /></div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
             </div>
           </motion.div>
         )}

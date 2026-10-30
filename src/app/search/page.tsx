@@ -139,7 +139,7 @@ function SearchContent() {
     setTimeout(() => setToast(t => ({ ...t, show: false })), 2000);
   };
 
-  // --- FONCTION DE TÉLÉCHARGEMENT ROBUSTE POUR MOBILE ---
+  // --- FONCTION DE TÉLÉCHARGEMENT ---
   const download = async (doc: any) => {
     if (!isAdmin && uploadCount < 5) {
       setToast({ msg: "Tu dois uploader 5 documents pour débloquer les téléchargements !", type: 'error', show: true });
@@ -157,13 +157,8 @@ function SearchContent() {
 
       await supabase.from('documents').update({ download_count: (doc.download_count || 0) + 1 }).eq('id', doc.id);
 
-      // Méthode forcée
-      const link = document.createElement('a');
-      link.href = data.signedUrl;
-      link.setAttribute('download', doc.title || 'document.pdf');
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      // Ouvre le PDF dans un nouvel onglet, ce qui marche sur mobile
+      window.open(data.signedUrl, '_blank');
 
     } catch (err: any) {
       alert("Erreur : " + err.message);
@@ -243,8 +238,8 @@ function SearchContent() {
             </button>
 
             <div style={{ flex: 1, display: 'flex', gap: '4px', background: '#FFFFFF', padding: '4px', borderRadius: '16px', border: '1px solid #E2E8F0', height: '50px', boxSizing: 'border-box' }}>
-              <button onClick={() => setSortBy('popular')} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', padding: '0 10px', background: sortBy === 'popular' ? '#F59E0B' : 'transparent', color: sortBy === 'popular' ? '#FFFFFF' : '#64748B', borderRadius: '12px', fontWeight: 700, fontSize: '12px' }}><TrendingUp size={16} /></button>
-              <button onClick={() => setSortBy('recent')} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', padding: '0 10px', background: sortBy === 'recent' ? '#F59E0B' : 'transparent', color: sortBy === 'recent' ? '#FFFFFF' : '#64748B', borderRadius: '12px', fontWeight: 700, fontSize: '12px' }}><Clock size={16} /></button>
+              <button onClick={() => setSortBy('popular')} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', padding: '0 10px', background: sortBy === 'popular' ? '#F59E0B' : 'transparent', color: sortBy === 'popular' ? '#FFFFFF' : '#64748B', borderRadius: '12px', fontWeight: 700, fontSize: '12px' }}><TrendingUp size={16} /> Pop.</button>
+              <button onClick={() => setSortBy('recent')} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', padding: '0 10px', background: sortBy === 'recent' ? '#F59E0B' : 'transparent', color: sortBy === 'recent' ? '#FFFFFF' : '#64748B', borderRadius: '12px', fontWeight: 700, fontSize: '12px' }}><Clock size={16} /> Réc.</button>
             </div>
           </div>
         </div>

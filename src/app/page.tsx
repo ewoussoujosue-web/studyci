@@ -17,8 +17,16 @@ export default function FeedPage() {
   const [posts, setPosts] = useState<any[]>([]);
   const [likes, setLikes] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error'; show: boolean }>({ msg: '', type: 'success', show: false });
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   const showToast = (msg: string, type: 'success' | 'error') => {
     setToast({ msg, type, show: true });
@@ -109,14 +117,25 @@ export default function FeedPage() {
     }
   };
 
-  const toggleLike = async (postId: string) => {
+  const toggleLike = async (post: any) => {
     if (!user) return;
-    if (likes.includes(postId)) {
-      await supabase.from('post_likes').delete().eq('user_id', user.id).eq('post_id', postId);
-      setLikes(likes.filter(id => id !== postId));
+    const isLiked = likes.includes(post.id);
+
+    if (isLiked) {
+      await supabase.from('post_likes').delete().eq('user_id', user.id).eq('post_id', post.id);
+      setLikes(likes.filter(id => id !== post.id));
     } else {
-      await supabase.from('post_likes').insert({ user_id: user.id, post_id: postId });
-      setLikes([...likes, postId]);
+      await supabase.from('post_likes').insert({ user_id: user.id, post_id: post.id });
+      setLikes([...likes, post.id]);
+
+      // CRÉER UNE NOTIFICATION POUR L'AUTEUR DU POST (si ce n'est pas moi)
+      if (post.user_id !== user.id) {
+        await supabase.from('notifications').insert({
+          user_id: post.user_id,
+          title: "Nouveau like ❤️",
+          message: `${profile.full_name} a aimé votre publication.`
+        });
+      }
     }
   };
 
@@ -169,7 +188,7 @@ export default function FeedPage() {
       
       <div className="main-content-layout" style={{ display: 'flex', width: '100%', maxWidth: '1300px' }}>
         
-        {/* SIDEBAR GAUCHE (Cachée sur mobile) */}
+        {/* SIDEBAR GAUCHE */}
         <div className="sidebar-desktop" style={{ width: '260px', padding: '20px', borderRight: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column', position: 'sticky', top: 0, height: '100vh', background: '#F8FAFC' }}>
           <h1 style={{ fontSize: '28px', fontWeight: 800, color: '#0F172A', marginBottom: '32px', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <div style={{ width: '32px', height: '32px', background: '#F59E0B', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFF', fontSize: '18px' }}>S</div>
@@ -212,13 +231,13 @@ export default function FeedPage() {
           <div style={{ background: '#F8FAFC', padding: '16px 0' }}>
             <AnimatePresence>
               {posts.map((p) => (
-                <PostCard key={p.id} post={p} isLiked={likes.includes(p.id)} onLike={() => toggleLike(p.id)} onDelete={() => deletePost(p.id)} isMine={p.user_id === user.id} currentUser={profile} onCommentAdded={loadFeed} />
+                <PostCard key={p.id} post={p} isLiked={likes.includes(p.id)} onLike={() => toggleLike(p)} onDelete={() => deletePost(p.id)} isMine={p.user_id === user.id} currentUser={profile} onCommentAdded={loadFeed} />
               ))}
             </AnimatePresence>
           </div>
         </div>
 
-        {/* COLONNE DROITE (Cachée sur mobile) */}
+        {/* COLONNE DROITE */}
         <div className="right-column-desktop" style={{ width: '350px', padding: '20px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
           <div style={{ position: 'relative' }}>
             <Search size={20} color="#94A3B8" style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)' }} />
@@ -235,32 +254,38 @@ export default function FeedPage() {
         </div>
       </div>
 
-      {/* BARRE DE NAVIGATION MOBILE FLOTTANTE (6 boutons) */}
-      <div className="mobile-nav-bar">
-        <a href="/" className="mobile-nav-item active">
-          <Home size={22} />
-        </a>
-        <a href="/search" className="mobile-nav-item">
-          <Search size={22} />
-        </a>
-        <a href="/reseau" className="mobile-nav-item">
-          <Users size={22} />
-        </a>
-        <a href="/messages" className="mobile-nav-item">
-          <MessageSquare size={22} />
-        </a>
-        <a href="/groupes" className="mobile-nav-item">
-          <Users size={22} />
-        </a>
-        <a href="/profile" className="mobile-nav-item">
-          <User size={22} />
-        </a>
-      </div>
+      {/* BARRE DE NAVIGATION MOBILE */}
+      {isMobile && (
+        <div className="mobile-nav-bar">
+          <a href="/" className="mobile-nav-item active"><Home size={22} /></a>
+          <a href="/search" className="mobile-nav-item"><Search size={22} /></a>
+          <a href="/reseau" className="mobile-nav-item"><Users size={22} /></a>
+          <a href="/messages" className="mobile-nav-item"><MessageSquare size={22} /></a>
+          <a href="/groupes" className="mobile-nav-item"><MessageSquare size={22} /></a>
+          <a href="/profile" className="mobile-nav-item"><User size={22} /></a>
+        </div>
+      )}
     </div>
   );
 }
 
-// --- COMPOSANT POSTCARD AVEC SUPPRESSION COMMENTAIRES ---
+// --- FONCTION POUR LE TEMPS RELATIF ---
+function timeAgo(dateString: string) {
+  const date = new Date(dateString);
+  const now = new Date();
+  const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+  if (seconds < 60) return "À l'instant";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} h`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days} j`;
+  return date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+}
+
+// --- COMPOSANT POUR LE POST ET SES COMMENTAIRES ---
 function PostCard({ post, isLiked, onLike, onDelete, isMine, currentUser, onCommentAdded }: any) {
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState('');
@@ -285,26 +310,35 @@ function PostCard({ post, isLiked, onLike, onDelete, isMine, currentUser, onComm
     if (!error) {
       setCommentText('');
       onCommentAdded();
+
+      // CRÉER UNE NOTIFICATION POUR L'AUTEUR DU POST
+      if (post.user_id !== currentUser.id) {
+        await supabase.from('notifications').insert({
+          user_id: post.user_id,
+          title: "Nouveau commentaire 💬",
+          message: `${currentUser.full_name} a commenté votre publication.`
+        });
+      }
     }
     setIsSubmitting(false);
-  };
-
-  const deleteComment = async (commentId: string) => {
-    if (!confirm("Supprimer ce commentaire ?")) return;
-    await supabase.from('post_comments').delete().eq('id', commentId);
-    onCommentAdded();
   };
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, height: 0 }} style={{ padding: '16px 20px', borderBottom: '1px solid #E2E8F0', background: '#FFF', marginBottom: '8px' }}>
       <div style={{ display: 'flex', gap: '12px' }}>
-        {post.profiles?.avatar_url ? <img src={post.profiles.avatar_url} style={{ width: '40px', height: '40px', borderRadius: '50%' }} /> : <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#F1F5F9' }}><User size={20} style={{ margin: '10px' }} /></div>}
+        
+        <a href={`/profile/${post.user_id}`} style={{ flexShrink: 0 }}>
+          {post.profiles?.avatar_url ? <img src={post.profiles.avatar_url} style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover' }} /> : <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#F1F5F9' }}><User size={20} style={{ margin: '10px' }} /></div>}
+        </a>
+
         <div style={{ flex: 1 }}>
           
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-              <p style={{ fontWeight: 800, color: '#0F172A', fontSize: '15px' }}>{post.profiles?.full_name}</p>
-              <p style={{ fontSize: '13px', color: '#64748B' }}>· {new Date(post.created_at).toLocaleDateString()}</p>
+              <a href={`/profile/${post.user_id}`} style={{ fontWeight: 800, color: '#0F172A', fontSize: '15px', textDecoration: 'none' }}>
+                {post.profiles?.full_name}
+              </a>
+              <p style={{ fontSize: '13px', color: '#64748B' }}>· {timeAgo(post.created_at)}</p>
             </div>
             {isMine && (
               <button onClick={onDelete} style={{ background: 'transparent', color: '#CBD5E1' }}><Trash2 size={18} /></button>
@@ -339,20 +373,22 @@ function PostCard({ post, isLiked, onLike, onDelete, isMine, currentUser, onComm
             </button>
           </div>
 
-          {/* ZONE COMMENTAIRES */}
           <AnimatePresence>
             {showComments && (
               <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} style={{ overflow: 'hidden', marginTop: '16px' }}>
                 {post.post_comments?.map((comment: any) => (
                   <div key={comment.id} style={{ display: 'flex', gap: '10px', marginBottom: '12px', paddingLeft: '12px', borderLeft: '2px solid #E2E8F0' }}>
-                    {comment.profiles?.avatar_url ? <img src={comment.profiles.avatar_url} style={{ width: '32px', height: '32px', borderRadius: '50%' }} /> : <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#F1F5F9' }}><User size={16} style={{ margin: '8px' }} /></div>}
+                    <a href={`/profile/${comment.user_id}`} style={{ flexShrink: 0 }}>
+                      {comment.profiles?.avatar_url ? <img src={comment.profiles.avatar_url} style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover' }} /> : <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: '#F1F5F9' }}><User size={16} style={{ margin: '8px' }} /></div>}
+                    </a>
                     <div style={{ background: '#F8FAFC', padding: '10px 14px', borderRadius: '12px', flex: 1 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                        <p style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A', marginBottom: '2px' }}>{comment.profiles?.full_name}</p>
-                        {/* BOUTON SUPPRIMER COMMENTAIRE (si c'est le mien) */}
-                        {comment.user_id === currentUser?.id && (
-                          <button onClick={() => deleteComment(comment.id)} style={{ background: 'transparent', color: '#CBD5E1', padding: '2px' }}><Trash2 size={14} /></button>
-                        )}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <a href={`/profile/${comment.user_id}`} style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A', marginBottom: '2px', textDecoration: 'none' }}>
+                            {comment.profiles?.full_name}
+                          </a>
+                          <span style={{ fontSize: '11px', color: '#94A3B8' }}>· {timeAgo(comment.created_at)}</span>
+                        </div>
                       </div>
                       <p style={{ fontSize: '14px', color: '#334155' }}>{comment.content}</p>
                     </div>

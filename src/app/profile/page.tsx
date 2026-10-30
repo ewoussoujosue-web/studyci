@@ -176,9 +176,15 @@ export default function MyProfilePage() {
                 {docCount >= 5 && <span style={{ background: '#EFF6FF', color: '#3B82F6', padding: '6px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}><Award size={14} /> Top Contributeur</span>}
               </div>
 
-              <button onClick={() => setEditing(!editing)} style={{ width: isMobile ? '100%' : 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '12px 20px', background: editing ? '#FEF2F2' : '#F8FAFC', color: editing ? '#EF4444' : '#1E40AF', border: `1px solid ${editing ? '#FECACA' : '#E2E8F0'}`, borderRadius: '12px', fontWeight: 700, cursor: 'pointer', marginBottom: '24px' }}>
-                {editing ? <><X size={18}/> Annuler</> : <><Edit2 size={18}/> Modifier mon profil</>}
-              </button>
+              {/* BOUTONS ACTIONS (Modifier + Déconnexion) */}
+              <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', flexDirection: isMobile ? 'column' : 'row' }}>
+                <button onClick={() => setEditing(!editing)} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '12px 20px', background: editing ? '#FEF2F2' : '#F8FAFC', color: editing ? '#EF4444' : '#1E40AF', border: `1px solid ${editing ? '#FECACA' : '#E2E8F0'}`, borderRadius: '12px', fontWeight: 700, cursor: 'pointer' }}>
+                  {editing ? <><X size={18}/> Annuler</> : <><Edit2 size={18}/> Modifier</>}
+                </button>
+                <button onClick={logout} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '12px 20px', background: '#FEF2F2', color: '#EF4444', border: '1px solid #FECACA', borderRadius: '12px', fontWeight: 700, cursor: 'pointer' }}>
+                  <LogOut size={18}/> Déconnexion
+                </button>
+              </div>
 
               {editing ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', background: '#F8FAFC', padding: '20px', borderRadius: '16px' }}>
@@ -235,26 +241,28 @@ export default function MyProfilePage() {
       </div>
 
       {/* BARRE DE NAVIGATION MOBILE */}
-      <div className="mobile-nav-bar">
-        <a href="/" className="mobile-nav-item">
-          <Home size={22} />
-        </a>
-        <a href="/search" className="mobile-nav-item">
-          <Search size={22} />
-        </a>
-        <a href="/reseau" className="mobile-nav-item">
-          <Users size={22} />
-        </a>
-        <a href="/messages" className="mobile-nav-item">
-          <MessageSquare size={22} />
-        </a>
-        <a href="/groupes" className="mobile-nav-item">
-          <MessageSquare size={22} />
-        </a>
-        <a href="/profile" className="mobile-nav-item active">
-          <User size={22} />
-        </a>
-      </div>
+      {isMobile && (
+        <div className="mobile-nav-bar">
+          <a href="/" className="mobile-nav-item">
+            <Home size={22} />
+          </a>
+          <a href="/search" className="mobile-nav-item">
+            <Search size={22} />
+          </a>
+          <a href="/reseau" className="mobile-nav-item">
+            <Users size={22} />
+          </a>
+          <a href="/messages" className="mobile-nav-item">
+            <MessageSquare size={22} />
+          </a>
+          <a href="/groupes" className="mobile-nav-item">
+            <MessageSquare size={22} />
+          </a>
+          <a href="/profile" className="mobile-nav-item active">
+            <User size={22} />
+          </a>
+        </div>
+      )}
     </div>
   );
 }
