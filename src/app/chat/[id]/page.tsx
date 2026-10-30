@@ -62,7 +62,6 @@ export default function ChatPage() {
     setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
   };
 
-  // --- GESTION DES VOCAUX ---
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -75,7 +74,6 @@ export default function ChatPage() {
       };
 
       mediaRecorder.onstop = () => {
-        // On récupère le type exact (souvent audio/webm ou audio/mp4 sur Safari)
         const mimeType = mediaRecorder.mimeType || 'audio/webm';
         const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
         setAudioBlob(audioBlob);
@@ -105,7 +103,6 @@ export default function ChatPage() {
     let file_type = null;
 
     try {
-      // 1. Upload du fichier (image/vidéo/pdf)
       if (fileToUpload) {
         file_type = fileToUpload.type;
         const ext = fileToUpload.name.split('.').pop();
@@ -118,7 +115,6 @@ export default function ChatPage() {
         }
       }
 
-      // 2. Upload du vocal
       if (audioBlob) {
         file_type = audioBlob.type;
         const ext = file_type.includes('mp4') ? 'mp4' : 'webm';
@@ -131,7 +127,6 @@ export default function ChatPage() {
         }
       }
 
-      // 3. Envoi du message
       const { error } = await supabase.from('messages').insert({
         sender_id: me.id,
         receiver_id: receiverId,
@@ -158,7 +153,6 @@ export default function ChatPage() {
     await supabase.from('messages').delete().eq('id', msgId);
   };
 
-  // --- FONCTION POUR TÉLÉCHARGER LES FICHIERS ---
   const downloadFile = async (url: string, filename: string) => {
     try {
       const response = await fetch(url);
@@ -173,9 +167,14 @@ export default function ChatPage() {
       document.body.removeChild(link);
       window.URL.revokeObjectURL(blobUrl);
     } catch (err) {
-      // Fallback si le fetch est bloqué (CORS) : on ouvre l'image dans un nouvel onglet
       window.open(url, '_blank');
     }
+  };
+
+  const isUserOnline = (lastSeen: string) => {
+    if (!lastSeen) return false;
+    const diff = new Date().getTime() - new Date(lastSeen).getTime();
+    return diff < 5 * 60 * 1000;
   };
 
   if (loading) return <Loader text="Ouverture de la discussion..." />;
@@ -183,24 +182,31 @@ export default function ChatPage() {
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: '#F8FAFC' }}>
       
-      {/* HEADER */}
-      <div style={{ background: '#FFF', padding: '16px 24px', borderBottom: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', gap: '16px' }}>
+      {/* HEADER FIXE */}
+      <div style={{ background: '#FFF', padding: '16px 24px', borderBottom: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', gap: '16px', position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100 }}>
         <a href="/messages" style={{ color: '#F59E0B', background: '#FEF3C7', padding: '10px', borderRadius: '50%', display: 'flex' }}>
           <ArrowLeft size={20} />
         </a>
-        {otherUser?.avatar_url ? (
-          <img src={otherUser.avatar_url} style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover' }} />
-        ) : (
-          <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#E2E8F0' }} />
-        )}
+        
+        <div style={{ position: 'relative' }}>
+          {otherUser?.avatar_url ? (
+            <img src={otherUser.avatar_url} style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover' }} />
+          ) : (
+            <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#E2E8F0' }} />
+          )}
+          {isUserOnline(otherUser?.last_seen) && (
+            <div style={{ position: 'absolute', bottom: '0', right: '0', width: '12px', height: '12px', background: '#10B981', borderRadius: '50%', border: '2px solid #FFF' }} />
+          )}
+        </div>
+
         <div>
           <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A' }}>{otherUser?.full_name || 'Discussion'}</h2>
-          <p style={{ fontSize: '13px', color: '#64748B' }}>{otherUser?.level || 'Étudiant'}</p>
+          <p style={{ fontSize: '13px', color: '#64748B' }}>{isUserOnline(otherUser?.last_seen) ? 'En ligne' : 'Hors ligne'}</p>
         </div>
       </div>
 
-      {/* ZONE DE CHAT */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+      {/* ZONE DE CHAT (avec marges pour le header fixe et le clavier) */}
+      <div style={{ flex: 1, overflowY: 'auto', padding: '24px', paddingTop: '90px', paddingBottom: '120px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
         {messages.map((msg) => {
           const isMine = msg.sender_id === me?.id;
           return (
@@ -223,30 +229,23 @@ export default function ChatPage() {
                   boxShadow: '0 2px 10px rgba(0,0,0,0.05)'
                 }}>
                 
-                {/* Affichage du média */}
                 {msg.file_url && (
                   <div style={{ marginBottom: msg.content ? '8px' : '0', position: 'relative' }}>
-                    
-                    {/* BOUTON TÉLÉCHARGER */}
                     <button 
                       onClick={() => downloadFile(msg.file_url, `fichier-${msg.id}`)}
                       style={{ position: 'absolute', top: '8px', right: '8px', background: 'rgba(0,0,0,0.5)', color: '#FFF', padding: '6px', borderRadius: '50%', zIndex: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                      title="Télécharger"
                     >
                       <Download size={16} />
                     </button>
 
-                    {/* IMAGE */}
                     {msg.file_type?.startsWith('image/') && (
                       <img src={msg.file_url} style={{ maxWidth: '100%', borderRadius: '8px' }} />
                     )}
                     
-                    {/* VIDÉO */}
                     {msg.file_type?.startsWith('video/') && (
                       <video src={msg.file_url} controls style={{ maxWidth: '100%', borderRadius: '8px' }} />
                     )}
 
-                    {/* AUDIO / VOCAL */}
                     {msg.file_type?.startsWith('audio/') && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(0,0,0,0.1)', padding: '8px', borderRadius: '8px' }}>
                         <Mic size={20} color={isMine ? '#FFF' : '#1E40AF'} />
@@ -254,7 +253,6 @@ export default function ChatPage() {
                       </div>
                     )}
 
-                    {/* AUTRE DOCUMENT (PDF) */}
                     {!msg.file_type?.startsWith('image') && !msg.file_type?.startsWith('video') && !msg.file_type?.startsWith('audio') && (
                       <a href={msg.file_url} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '8px', textDecoration: 'underline', color: isMine ? '#FFF' : '#1E40AF' }}>
                         <FileText size={20} /> Ouvrir le document
@@ -274,8 +272,8 @@ export default function ChatPage() {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* ZONE DE SAISIE */}
-      <div style={{ background: '#FFF', padding: '16px 24px', borderTop: '1px solid #E2E8F0' }}>
+      {/* ZONE DE SAISIE FIXE EN BAS */}
+      <div style={{ background: '#FFF', padding: '16px 24px', borderTop: '1px solid #E2E8F0', position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 100 }}>
         
         {fileToUpload && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#F1F5F9', padding: '8px 12px', borderRadius: '8px', marginBottom: '12px', width: 'fit-content' }}>
