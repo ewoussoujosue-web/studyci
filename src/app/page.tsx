@@ -19,6 +19,9 @@ export default function FeedPage() {
   const [uploading, setUploading] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   
+  // ⚡ TIMER UNIQUE POUR LES POSTS
+  const [timeTick, setTimeTick] = useState(0);
+  
   // ⚡ ÉTATS POUR L'ADMIN
   const [isAdmin, setIsAdmin] = useState(false);
   const [showAdminLogin, setShowAdminLogin] = useState(false);
@@ -88,15 +91,12 @@ export default function FeedPage() {
   };
 
   const fetchAdminData = async () => {
-    // 1. Documents en attente
     const { data: docs } = await supabase.from('documents').select('*, profiles:uploader_id(full_name, email)').eq('status', 'pending').order('created_at', { ascending: true });
     if (docs) setPendingDocs(docs);
 
-    // 2. Tous les utilisateurs
     const { data: usersData } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
     if (usersData) setAdminUsers(usersData);
 
-    // 3. Statistiques
     const { count: docsCount } = await supabase.from('documents').select('*', { count: 'exact', head: true }).eq('status', 'approved');
     setTotalDocs(docsCount || 0);
 
@@ -123,6 +123,14 @@ export default function FeedPage() {
 
     return () => clearInterval(interval);
   }, [user]);
+
+  // ⚡ LE MINUTEUR UNIQUE POUR LE TEMPS DES POSTS
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setTimeTick(t => t + 1);
+    }, 60000); // Toutes les 60 secondes
+    return () => clearInterval(interval);
+  }, []);
 
   // ⚡ LOGIQUE DE CONNEXION ADMIN
   const handleAdminLogin = async (e: React.FormEvent) => {
@@ -435,11 +443,11 @@ export default function FeedPage() {
                   <p style={{ fontSize: '28px', fontWeight: 900, color: '#0F172A' }}>{adminUsers.length}</p>
                 </div>
                 <div style={{ background: '#FFF', border: '1px solid #E2E8F0', padding: '20px', borderRadius: '16px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#64748B', fontSize: '13px', fontWeight: 600, marginBottom: '8px' }}><FileText size={16} /> Documents Approuvés</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#64748B', fontSize: '13px', fontWeight: 600, marginBottom: '8px' }}><FileText size={16} /> Docs Approuvés</div>
                   <p style={{ fontSize: '28px', fontWeight: 900, color: '#0F172A' }}>{totalDocs}</p>
                 </div>
                 <div style={{ background: '#FFF', border: '1px solid #E2E8F0', padding: '20px', borderRadius: '16px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#64748B', fontSize: '13px', fontWeight: 600, marginBottom: '8px' }}><Download size={16} /> Total Téléchargements</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#64748B', fontSize: '13px', fontWeight: 600, marginBottom: '8px' }}><Download size={16} /> Téléchargements</div>
                   <p style={{ fontSize: '28px', fontWeight: 900, color: '#0F172A' }}>{totalDownloads}</p>
                 </div>
                 <div style={{ background: '#FFF', border: '1px solid #E2E8F0', padding: '20px', borderRadius: '16px' }}>
@@ -529,7 +537,17 @@ export default function FeedPage() {
               <div style={{ background: '#F8FAFC', padding: '16px 0' }}>
                 <AnimatePresence>
                   {posts.map((p) => (
-                    <PostCard key={p.id} post={p} isLiked={likes.includes(p.id)} onLike={() => toggleLike(p)} onDelete={() => deletePost(p.id)} isMine={p.user_id === user.id} currentUser={profile} onCommentAdded={loadFeed} />
+                    <PostCard 
+                      key={p.id} 
+                      post={p} 
+                      isLiked={likes.includes(p.id)} 
+                      onLike={() => toggleLike(p)} 
+                      onDelete={() => deletePost(p.id)} 
+                      isMine={p.user_id === user.id} 
+                      currentUser={profile} 
+                      onCommentAdded={loadFeed} 
+                      timeTick={timeTick} 
+                    />
                   ))}
                 </AnimatePresence>
               </div>
@@ -592,16 +610,10 @@ function timeAgo(dateString: string) {
 }
 
 // --- COMPOSANT POUR LE POST ET SES COMMENTAIRES ---
-function PostCard({ post, isLiked, onLike, onDelete, isMine, currentUser, onCommentAdded }: any) {
+function PostCard({ post, isLiked, onLike, onDelete, isMine, currentUser, onCommentAdded, timeTick }: any) {
   const [showComments, setShowComments] = useState(false);
   const [commentText, setCommentText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const [, setTick] = useState(0);
-  useEffect(() => {
-    const timer = setInterval(() => setTick(t => t + 1), 60000);
-    return () => clearInterval(timer);
-  }, []);
 
   const themeData = post.theme === 'gradient-1' ? { bg: 'linear-gradient(135deg, #1E3A8A, #3B82F6)', color: '#FFF' } 
     : post.theme === 'gradient-2' ? { bg: 'linear-gradient(135deg, #F59E0B, #EF4444)', color: '#FFF' }

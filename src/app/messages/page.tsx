@@ -10,6 +10,7 @@ export default function MessagesPage() {
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<any>(null);
   const [conversations, setConversations] = useState<any[]>([]);
+  const [onlineUsers, setOnlineUsers] = useState<any[]>([]); // ⚡ ÉTAT POUR LES PERSONNES EN LIGNE
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
@@ -18,11 +19,24 @@ export default function MessagesPage() {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) { window.location.href = '/inscription'; return; }
         
+        // Mettre à jour ma propre connexion
         await supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', session.user.id);
+        
         const { data: prof } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
         setProfile(prof);
 
-        // On récupère tous les messages
+        // ⚡ RÉCUPÉRER LES PERSONNES EN LIGNE (Moins de 2 minutes)
+        const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+        const { data: onlineData } = await supabase
+          .from('profiles')
+          .select('id, full_name, avatar_url, last_seen')
+          .neq('id', session.user.id) // Pas moi-même
+          .gte('last_seen', twoMinutesAgo)
+          .order('full_name', { ascending: true });
+          
+        if (onlineData) setOnlineUsers(onlineData);
+
+        // Récupérer les messages pour la liste des conversations
         const { data: msgs } = await supabase
           .from('messages')
           .select('*')
@@ -63,11 +77,10 @@ export default function MessagesPage() {
               lastMessage: msg.content || (msg.file_url ? '📎 Fichier' : 'Message'),
               date: msg.created_at,
               isMine: msg.sender_id === session.user.id,
-              unread: 0 // On initialise à 0
+              unread: 0
             });
           }
           
-          // ⚡ LOGIQUE STRICTE : On ne compte que si c'est pour moi ET non lu (is_read === false)
           if (msg.receiver_id === session.user.id && msg.is_read === false) {
             const conv = conversationsMap.get(otherUserId);
             conv.unread += 1;
@@ -222,6 +235,50 @@ export default function MessagesPage() {
              <StoriesBar profile={profile} />
           </div>
 
+          {/* ⚡ SECTION : PERSONNES EN LIGNE */}
+          <div style={{ padding: '16px 24px', borderBottom: '1px solid #E2E8F0', background: '#F0FDF4' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+              <div style={{ width: '10px', height: '10px', background: '#10B981', borderRadius: '50%', boxShadow: '0 0 10px #10B981' }} />
+              <h3 style={{ fontSize: '14px', fontWeight: 800, color: '#065F46' }}>En ligne ({onlineUsers.length})</h3>
+            </div>
+            
+            <div style={{ display: 'flex', gap: '16px', overflowX: 'auto', paddingBottom: '8px' }}>
+              {onlineUsers.length === 0 ? (
+                <p style={{ fontSize: '13px', color: '#059669', fontStyle: 'italic' }}>Personne n'est en ligne pour le moment.</p>
+              ) : (
+                onlineUsers.map((onlineUser) => (
+                  <a 
+                    key={onlineUser.id} 
+                    href={`/chat/${onlineUser.id}`}
+                    onClick={async (e) => {
+                      e.preventDefault();
+                      const { data: { session } } = await supabase.auth.getSession();
+                      if (session) {
+                        await supabase.from('messages').update({ is_read: true }).eq('receiver_id', session.user.id).eq('sender_id', onlineUser.id).neq('is_read', true);
+                      }
+                      window.location.href = `/chat/${onlineUser.id}`;
+                    }}
+                    style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', cursor: 'pointer', flexShrink: 0, textDecoration: 'none' }}
+                  >
+                    <div style={{ position: 'relative' }}>
+                      {onlineUser.avatar_url ? (
+                        <img src={onlineUser.avatar_url} style={{ width: '56px', height: '56px', borderRadius: '50%', objectFit: 'cover', border: '3px solid #10B981' }} />
+                      ) : (
+                        <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: '#F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '3px solid #10B981' }}>
+                          <User size={24} color="#94A3B8" />
+                        </div>
+                      )}
+                      <div style={{ position: 'absolute', bottom: '0', right: '0', width: '14px', height: '14px', background: '#10B981', borderRadius: '50%', border: '2px solid #FFF' }} />
+                    </div>
+                    <p style={{ fontSize: '12px', fontWeight: 700, color: '#065F46', maxWidth: '64px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {onlineUser.full_name?.split(' ')[0]}
+                    </p>
+                  </a>
+                ))
+              )}
+            </div>
+          </div>
+
           <div style={{ padding: '16px 24px', borderBottom: '1px solid #E2E8F0', background: '#F8FAFC' }}>
             <div style={{ position: 'relative' }}>
               <Search size={18} color="#64748B" style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)' }} />
@@ -249,11 +306,10 @@ export default function MessagesPage() {
                   <a 
                     key={contact.id} 
                     href={`/chat/${contact.id}`} 
-                    onClick={async () => {
-                      // 1. Enlève le point bleu visuellement tout de suite
+                    onClick={async (e) => {
+                      e.preventDefault(); 
                       setConversations(prev => prev.map(c => c.id === contact.id ? { ...c, unread: 0 } : c));
                       
-                      // 2. Dit à Supabase de marquer comme lu AVANT d'ouvrir le chat
                       const { data: { session } } = await supabase.auth.getSession();
                       if (session) {
                         await supabase
@@ -261,8 +317,10 @@ export default function MessagesPage() {
                           .update({ is_read: true })
                           .eq('receiver_id', session.user.id)
                           .eq('sender_id', contact.id)
-                          .eq('is_read', false);
+                          .neq('is_read', true);
                       }
+                      
+                      window.location.href = `/chat/${contact.id}`;
                     }}
                     style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '16px 24px', textDecoration: 'none', borderBottom: '1px solid #F1F5F9', transition: 'background 0.2s' }}
                   >
