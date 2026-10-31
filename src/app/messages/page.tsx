@@ -2,20 +2,19 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { User, MessageSquare, Home, Search, Users, Calendar, Sparkles, LogOut, PenSquare, Plus } from 'lucide-react';
+import { User, MessageSquare, Home, Search, Users, Calendar, Sparkles, LogOut, PenSquare } from 'lucide-react';
 import Loader from '@/components/Loader';
+import StoriesBar from '@/components/StoriesBar';
 
 export default function MessagesPage() {
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<any>(null);
   const [conversations, setConversations] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeStoryUsers, setActiveStoryUsers] = useState<any[]>([]);
 
   useEffect(() => {
     const fetchMessages = async () => {
       try {
-        // 1. Session & Profil
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) { window.location.href = '/inscription'; return; }
         
@@ -23,19 +22,7 @@ export default function MessagesPage() {
         const { data: prof } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
         setProfile(prof);
 
-        // 2. Récupérer les stories actives (moins de 24h)
-        const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-        const { data: storiesData } = await supabase
-          .from('stories')
-          .select('user_id, profiles(id, full_name, avatar_url, last_seen)')
-          .gte('created_at', oneDayAgo);
-
-        if (storiesData) {
-          const uniqueStoryUsers = Array.from(new Map(storiesData.map(s => [s.user_id, s.profiles])).values());
-          setActiveStoryUsers(uniqueStoryUsers);
-        }
-
-        // 3. Récupérer tous les messages
+        // On récupère tous les messages
         const { data: msgs } = await supabase
           .from('messages')
           .select('*')
@@ -48,7 +35,6 @@ export default function MessagesPage() {
           return;
         }
 
-        // 4. Récupérer les profils des interlocuteurs
         const otherUserIds = new Set<string>();
         msgs.forEach(msg => {
           if (msg.sender_id !== session.user.id) otherUserIds.add(msg.sender_id);
@@ -60,7 +46,6 @@ export default function MessagesPage() {
           .select('id, full_name, avatar_url, last_seen')
           .in('id', Array.from(otherUserIds));
 
-        // 5. Grouper par conversation
         const conversationsMap = new Map();
         
         msgs.forEach(msg => {
@@ -78,13 +63,14 @@ export default function MessagesPage() {
               lastMessage: msg.content || (msg.file_url ? '📎 Fichier' : 'Message'),
               date: msg.created_at,
               isMine: msg.sender_id === session.user.id,
-              unread: (msg.receiver_id === session.user.id && msg.is_read === false) ? 1 : 0
+              unread: 0 // On initialise à 0
             });
-          } else {
-             if (msg.receiver_id === session.user.id && msg.is_read === false) {
-               const conv = conversationsMap.get(otherUserId);
-               conv.unread += 1;
-             }
+          }
+          
+          // ⚡ LOGIQUE STRICTE : On ne compte que si c'est pour moi ET non lu (is_read === false)
+          if (msg.receiver_id === session.user.id && msg.is_read === false) {
+            const conv = conversationsMap.get(otherUserId);
+            conv.unread += 1;
           }
         });
         
@@ -108,53 +94,77 @@ export default function MessagesPage() {
       if (document.visibilityState === 'visible') fetchMessages();
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleVisibilityChange);
     
     return () => { 
       supabase.removeChannel(channel); 
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleVisibilityChange);
     };
   }, []);
 
   const logout = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+      await supabase.from('profiles').update({ last_seen: new Date().toISOString() }).eq('id', session.user.id);
+    }
     await supabase.auth.signOut();
     window.location.href = '/';
   };
 
-  // 🕒 Fonction pour formater le temps écoulé depuis la dernière déconnexion
   const formatLastSeen = (lastSeen: string) => {
     if (!lastSeen) return 'Hors ligne';
     
-    const date = new Date(lastSeen);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    
+    const dateMs = new Date(lastSeen).getTime();
+    const nowMs = Date.now(); 
+
+    const diffMs = nowMs - dateMs;
     const diffSecs = Math.floor(diffMs / 1000);
     const diffMins = Math.floor(diffSecs / 60);
-    const diffHours = Math.floor(diffMins / 60);
-    const diffDays = Math.floor(diffHours / 24);
-    
-    // Si moins de 5 minutes, on considère "En ligne" (géré en amont généralement mais par sécurité)
-    if (diffMins < 5) return 'En ligne';
+
+    if (diffSecs < 0) return "À l'instant";
+
+    if (diffMins < 1) return `Il y a ${diffSecs} sec`;
     if (diffMins < 60) return `Il y a ${diffMins} min`;
-    if (diffHours < 24) return `Il y a ${diffHours}h`;
-    if (diffDays === 1) return `Il y a hier`;
-    return `Il y a ${diffDays} jours`;
+    
+    const date = new Date(lastSeen);
+    const now = new Date();
+    
+    if (date.toDateString() === now.toDateString()) {
+      return `Aujourd'hui à ${date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
+    }
+    
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    if (date.toDateString() === yesterday.toDateString()) {
+      return `Hier à ${date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
+    }
+
+    return `Le ${date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })} à ${date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
   };
 
   const isUserOnline = (lastSeen: string) => {
     if (!lastSeen) return false;
-    const diff = new Date().getTime() - new Date(lastSeen).getTime();
-    return diff < 5 * 60 * 1000;
+    const dateMs = new Date(lastSeen).getTime();
+    const nowMs = Date.now();
+    const diff = nowMs - dateMs;
+    return diff > -10000 && diff < 120000;
   };
 
   const formatTime = (dateString: string) => {
     const date = new Date(dateString);
     const now = new Date();
-    const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
-
-    if (diffDays === 0) return date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-    if (diffDays === 1) return 'Hier';
-    if (diffDays < 7) return date.toLocaleDateString('fr-FR', { weekday: 'short' });
+    
+    if (date.toDateString() === now.toDateString()) {
+      return date.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    }
+    
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    if (date.toDateString() === yesterday.toDateString()) {
+      return 'Hier';
+    }
+    
     return date.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
   };
 
@@ -193,14 +203,13 @@ export default function MessagesPage() {
                 <p style={{ fontSize: '12px', color: '#64748B' }}>{profile?.level || 'Étudiant'}</p>
               </div>
             </a>
-            <button onClick={logout} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px', borderRadius: '12px', background: 'transparent', color: '#EF4444', fontWeight: 600, fontSize: '16px' }}><LogOut size={24} /> Déconnexion</button>
+            <button onClick={logout} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 16px', borderRadius: '12px', background: 'transparent', color: '#EF4444', fontWeight: 600, fontSize: '16px', border: 'none' }}><LogOut size={24} /> Déconnexion</button>
           </div>
         </div>
 
         {/* --- CONTENU CENTRAL --- */}
         <div style={{ flex: 1, background: '#FFF', display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
           
-          {/* HEADER */}
           <div style={{ padding: '20px 24px', borderBottom: '1px solid #E2E8F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#FFF' }}>
             <h2 style={{ fontSize: '24px', fontWeight: 800, color: '#0F172A' }}>Messagerie</h2>
             
@@ -209,43 +218,10 @@ export default function MessagesPage() {
             </a>
           </div>
 
-          {/* BARRE DE STORIES */}
-          <div style={{ padding: '16px 24px', borderBottom: '1px solid #E2E8F0', overflowX: 'auto', display: 'flex', gap: '16px', alignItems: 'center', background: '#FFF' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', cursor: 'pointer', flexShrink: 0 }}>
-              <div style={{ position: 'relative' }}>
-                {profile?.avatar_url ? (
-                  <img src={profile.avatar_url} style={{ width: '60px', height: '60px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #FFF' }} />
-                ) : (
-                  <div style={{ width: '60px', height: '60px', borderRadius: '50%', background: '#F1F5F9', border: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <User size={24} color="#94A3B8" />
-                  </div>
-                )}
-                <div style={{ position: 'absolute', bottom: '0', right: '0', background: '#3B82F6', borderRadius: '50%', padding: '2px', border: '2px solid #FFF' }}>
-                  <Plus size={12} color="#FFF" />
-                </div>
-              </div>
-              <p style={{ fontSize: '11px', color: '#64748B', fontWeight: 600 }}>Ma story</p>
-            </div>
-
-            {activeStoryUsers.map((contact: any) => (
-              contact && (
-                <div key={contact.id} onClick={() => window.location.href = `/profile/${contact.id}`} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', cursor: 'pointer', flexShrink: 0 }}>
-                  <div style={{ padding: '2px', borderRadius: '50%', background: 'linear-gradient(45deg, #F59E0B, #EF4444)' }}>
-                    {contact.avatar_url ? (
-                      <img src={contact.avatar_url} style={{ width: '56px', height: '56px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #FFF' }} />
-                    ) : (
-                      <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: '#F1F5F9', border: '2px solid #FFF', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <User size={24} color="#94A3B8" />
-                      </div>
-                    )}
-                  </div>
-                  <p style={{ fontSize: '11px', color: '#0F172A', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '60px' }}>{contact.full_name.split(' ')[0]}</p>
-                </div>
-              )
-            ))}
+          <div style={{ background: '#FFF' }}>
+             <StoriesBar profile={profile} />
           </div>
 
-          {/* BARRE DE RECHERCHE */}
           <div style={{ padding: '16px 24px', borderBottom: '1px solid #E2E8F0', background: '#F8FAFC' }}>
             <div style={{ position: 'relative' }}>
               <Search size={18} color="#64748B" style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)' }} />
@@ -259,7 +235,6 @@ export default function MessagesPage() {
             </div>
           </div>
           
-          {/* LISTE DES CONVERSATIONS */}
           <div style={{ flex: 1, overflowY: 'auto', paddingBottom: '80px' }}>
             {filteredConversations.length === 0 ? (
               <div style={{ padding: '60px 20px', textAlign: 'center' }}>
@@ -274,8 +249,20 @@ export default function MessagesPage() {
                   <a 
                     key={contact.id} 
                     href={`/chat/${contact.id}`} 
-                    onClick={() => {
+                    onClick={async () => {
+                      // 1. Enlève le point bleu visuellement tout de suite
                       setConversations(prev => prev.map(c => c.id === contact.id ? { ...c, unread: 0 } : c));
+                      
+                      // 2. Dit à Supabase de marquer comme lu AVANT d'ouvrir le chat
+                      const { data: { session } } = await supabase.auth.getSession();
+                      if (session) {
+                        await supabase
+                          .from('messages')
+                          .update({ is_read: true })
+                          .eq('receiver_id', session.user.id)
+                          .eq('sender_id', contact.id)
+                          .eq('is_read', false);
+                      }
                     }}
                     style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '16px 24px', textDecoration: 'none', borderBottom: '1px solid #F1F5F9', transition: 'background 0.2s' }}
                   >
@@ -326,7 +313,6 @@ export default function MessagesPage() {
         </div>
       </div>
 
-      {/* BARRE DE NAVIGATION MOBILE */}
       <div className="mobile-nav-bar">
         <a href="/" className="mobile-nav-item"><Home size={22} /></a>
         <a href="/search" className="mobile-nav-item"><Search size={22} /></a>

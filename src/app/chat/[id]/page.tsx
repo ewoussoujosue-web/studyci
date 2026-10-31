@@ -19,7 +19,6 @@ export default function ChatPage() {
   const [uploading, setUploading] = useState(false);
   const [fileToUpload, setFileToUpload] = useState<File | null>(null);
   
-  // États pour les vocaux
   const [isRecording, setIsRecording] = useState(false);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -35,8 +34,7 @@ export default function ChatPage() {
       if (!session) { window.location.href = '/inscription'; return; }
       setMe(session.user);
 
-      const { data: otherProf, error: profError } = await supabase.from('profiles').select('*').eq('id', receiverId).single();
-      if (profError) console.error("Erreur profil:", profError);
+      const { data: otherProf } = await supabase.from('profiles').select('*').eq('id', receiverId).single();
       setOtherUser(otherProf);
 
       const { data: msgs } = await supabase
@@ -106,7 +104,6 @@ export default function ChatPage() {
     let file_type = null;
 
     try {
-      // 1. Uploads
       if (fileToUpload) {
         file_type = fileToUpload.type;
         const ext = fileToUpload.name.split('.').pop();
@@ -129,8 +126,7 @@ export default function ChatPage() {
         }
       }
 
-      // 2. Insertion du message
-      const { error: msgError } = await supabase.from('messages').insert({
+      await supabase.from('messages').insert({
         sender_id: me.id,
         receiver_id: receiverId,
         content: newMessage.trim() || (audioBlob ? 'Message vocal' : 'Fichier'),
@@ -138,34 +134,21 @@ export default function ChatPage() {
         file_type
       });
 
-      if (msgError) {
-        alert("❌ Erreur message : " + msgError.message);
-        return;
-      }
+      const { data: myProf } = await supabase.from('profiles').select('full_name').eq('id', me.id).single();
+      await supabase.from('notifications').insert({
+        user_id: receiverId,
+        title: 'Nouveau message 💬',
+        message: `${myProf?.full_name || 'Quelqu\'un'} t'a envoyé un message.`,
+        type: 'message',
+        from_user_id: me.id
+      });
 
-      // 3. Notification
-      try {
-        const { data: myProf } = await supabase.from('profiles').select('full_name').eq('id', me.id).single();
-        
-        await supabase.from('notifications').insert({
-          user_id: receiverId,
-          title: 'Nouveau message 💬',
-          message: `${myProf?.full_name || 'Quelqu\'un'} t'a envoyé un message.`,
-          type: 'message',
-          from_user_id: me.id
-        });
-      } catch (err: any) {
-        console.error("Erreur notif :", err.message);
-      }
-
-      // 4. Reset
       setNewMessage('');
       setFileToUpload(null);
       setAudioBlob(null);
       scrollToBottom();
-
     } catch (err: any) {
-      alert("Erreur globale : " + err.message);
+      alert("Erreur : " + err.message);
     } finally {
       setUploading(false);
     }
@@ -194,10 +177,28 @@ export default function ChatPage() {
     }
   };
 
+  const formatLastSeen = (lastSeen: string) => {
+    if (!lastSeen) return 'Hors ligne';
+    const date = new Date(lastSeen.endsWith('Z') || lastSeen.includes('+') ? lastSeen : lastSeen + 'Z');
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+    
+    if (diffMins < 2) return 'En ligne';
+    if (diffMins < 60) return `Il y a ${diffMins} min`;
+    if (diffHours < 24) return `Il y a ${diffHours}h`;
+    if (diffDays === 1) return `Il y a hier`;
+    return `Il y a ${diffDays} jours`;
+  };
+
   const isUserOnline = (lastSeen: string) => {
     if (!lastSeen) return false;
-    const diff = new Date().getTime() - new Date(lastSeen).getTime();
-    return diff < 5 * 60 * 1000;
+    const date = new Date(lastSeen.endsWith('Z') || lastSeen.includes('+') ? lastSeen : lastSeen + 'Z');
+    const diff = new Date().getTime() - date.getTime();
+    return diff < 3 * 60 * 1000;
   };
 
   if (loading) return <Loader text="Ouverture de la discussion..." />;
@@ -205,7 +206,6 @@ export default function ChatPage() {
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: '#F8FAFC' }}>
       
-      {/* HEADER FIXE */}
       <div style={{ background: '#FFF', padding: '16px 24px', borderBottom: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', gap: '16px', position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100 }}>
         <button 
           onClick={() => window.location.href = '/messages'} 
@@ -227,17 +227,18 @@ export default function ChatPage() {
 
         <div>
           <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A' }}>{otherUser?.full_name || 'Discussion'}</h2>
-          <p style={{ fontSize: '13px', color: '#64748B' }}>{isUserOnline(otherUser?.last_seen) ? 'En ligne' : 'Hors ligne'}</p>
+          <p style={{ fontSize: '13px', color: isUserOnline(otherUser?.last_seen) ? '#10B981' : '#64748B', fontWeight: isUserOnline(otherUser?.last_seen) ? 600 : 400 }}>
+            {isUserOnline(otherUser?.last_seen) ? 'En ligne' : formatLastSeen(otherUser?.last_seen)}
+          </p>
         </div>
       </div>
 
-      {/* ZONE DE CHAT */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '24px', paddingTop: '90px', paddingBottom: '120px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
         {messages.map((msg) => {
           const isMine = msg.sender_id === me?.id;
+          const formattedDateStr = msg.created_at.endsWith('Z') || msg.created_at.includes('+') ? msg.created_at : msg.created_at + 'Z';
           return (
             <div key={msg.id} style={{ display: 'flex', justifyContent: isMine ? 'flex-end' : 'flex-start', alignItems: 'center', gap: '10px' }}>
-              
               {isMine && (
                 <button onClick={() => deleteMessage(msg.id)} style={{ background: 'transparent', color: '#CBD5E1', cursor: 'pointer', border: 'none' }} title="Supprimer">
                   <Trash2 size={16} />
@@ -264,21 +265,14 @@ export default function ChatPage() {
                       <Download size={16} />
                     </button>
 
-                    {msg.file_type?.startsWith('image/') && (
-                      <img src={msg.file_url} style={{ maxWidth: '100%', borderRadius: '8px' }} />
-                    )}
-                    
-                    {msg.file_type?.startsWith('video/') && (
-                      <video src={msg.file_url} controls style={{ maxWidth: '100%', borderRadius: '8px' }} />
-                    )}
-
+                    {msg.file_type?.startsWith('image/') && <img src={msg.file_url} style={{ maxWidth: '100%', borderRadius: '8px' }} />}
+                    {msg.file_type?.startsWith('video/') && <video src={msg.file_url} controls style={{ maxWidth: '100%', borderRadius: '8px' }} />}
                     {msg.file_type?.startsWith('audio/') && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(0,0,0,0.1)', padding: '8px', borderRadius: '8px' }}>
                         <Mic size={20} color={isMine ? '#FFF' : '#1E40AF'} />
                         <audio src={msg.file_url} controls style={{ height: '30px', flex: 1 }} />
                       </div>
                     )}
-
                     {!msg.file_type?.startsWith('image') && !msg.file_type?.startsWith('video') && !msg.file_type?.startsWith('audio') && (
                       <a href={msg.file_url} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '8px', textDecoration: 'underline', color: isMine ? '#FFF' : '#1E40AF' }}>
                         <FileText size={20} /> Ouvrir le document
@@ -289,7 +283,7 @@ export default function ChatPage() {
 
                 <p style={{ fontSize: '15px', lineHeight: 1.4 }}>{msg.content}</p>
                 <p style={{ fontSize: '10px', opacity: 0.7, textAlign: 'right', marginTop: '4px' }}>
-                  {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  {new Date(formattedDateStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </p>
               </motion.div>
             </div>
@@ -298,22 +292,12 @@ export default function ChatPage() {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* ZONE DE SAISIE FIXE EN BAS */}
       <div style={{ background: '#FFF', padding: '16px 24px', borderTop: '1px solid #E2E8F0', position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 100 }}>
-        
         {fileToUpload && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#F1F5F9', padding: '8px 12px', borderRadius: '8px', marginBottom: '12px', width: 'fit-content' }}>
             <Paperclip size={16} color="#64748B" />
             <span style={{ fontSize: '13px', color: '#334155', fontWeight: 600 }}>{fileToUpload.name}</span>
             <button onClick={() => setFileToUpload(null)} style={{ background: 'transparent', color: '#EF4444', border: 'none' }}><X size={16} /></button>
-          </div>
-        )}
-
-        {audioBlob && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#F1F5F9', padding: '8px 12px', borderRadius: '8px', marginBottom: '12px', width: 'fit-content' }}>
-            <Mic size={16} color="#64748B" />
-            <span style={{ fontSize: '13px', color: '#334155', fontWeight: 600 }}>Vocal prêt</span>
-            <button onClick={() => setAudioBlob(null)} style={{ background: 'transparent', color: '#EF4444', border: 'none' }}><X size={16} /></button>
           </div>
         )}
 
@@ -323,11 +307,7 @@ export default function ChatPage() {
             <input type="file" accept="image/*,video/*,application/pdf" style={{ display: 'none' }} onChange={(e) => setFileToUpload(e.target.files?.[0] || null)} />
           </label>
 
-          <button 
-            type="button" 
-            onClick={isRecording ? stopRecording : startRecording} 
-            style={{ color: isRecording ? '#EF4444' : '#64748B', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', background: isRecording ? '#FEF2F2' : '#F1F5F9', borderRadius: '50%', border: 'none', flexShrink: 0 }}
-          >
+          <button type="button" onClick={isRecording ? stopRecording : startRecording} style={{ color: isRecording ? '#EF4444' : '#64748B', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '40px', height: '40px', background: isRecording ? '#FEF2F2' : '#F1F5F9', borderRadius: '50%', border: 'none', flexShrink: 0 }}>
             {isRecording ? <Square size={20} /> : <Mic size={20} />}
           </button>
 
